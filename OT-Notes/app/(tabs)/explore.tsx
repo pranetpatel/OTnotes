@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { AssessmentCard } from '@/components/AssessmentCard';
 import { getAllAssessments, deleteAssessment, Assessment } from '@/services/database';
 import { exportToCSV } from '@/services/csvExport';
@@ -54,42 +55,41 @@ export default function HistoryScreen() {
     }
   }
 
+  const exportButton = (
+    <TouchableOpacity
+      style={[styles.exportBtn, (exporting || assessments.length === 0) && styles.exportBtnDisabled]}
+      onPress={handleExport}
+      disabled={exporting || assessments.length === 0}
+      activeOpacity={0.75}
+    >
+      {exporting ? (
+        <ActivityIndicator size="small" color="#fff" style={{ marginRight: 4 }} />
+      ) : (
+        <Text style={styles.exportIcon}>⬆</Text>
+      )}
+      <Text style={styles.exportText}>{exporting ? 'Exporting…' : 'Export CSV'}</Text>
+    </TouchableOpacity>
+  );
+
+  const countText = assessments.length === 0
+    ? 'No sessions recorded yet'
+    : `${assessments.length} session${assessments.length !== 1 ? 's' : ''} on record`;
+
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.title}>Records</Text>
-          <Text style={styles.subtitle}>
-            {assessments.length === 0
-              ? 'No assessments yet'
-              : `${assessments.length} session${assessments.length !== 1 ? 's' : ''} recorded`}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.exportBtn, exporting && styles.exportBtnDisabled]}
-          onPress={handleExport}
-          disabled={exporting || assessments.length === 0}
-          activeOpacity={0.75}
-        >
-          {exporting ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.exportIcon}>↑</Text>
-          )}
-          <Text style={styles.exportText}>{exporting ? 'Exporting…' : 'Export CSV'}</Text>
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader subtitle={countText} right={exportButton} />
 
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading records…</Text>
         </View>
       ) : assessments.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={styles.emptyTitle}>No records yet</Text>
+          <Text style={styles.emptyIcon}>🏊</Text>
+          <Text style={styles.emptyTitle}>No Records Yet</Text>
           <Text style={styles.emptyBody}>
-            Complete an assessment on the first tab and it will appear here.
+            Complete an assessment on the Assessment tab and it will appear here.
           </Text>
         </View>
       ) : (
@@ -101,6 +101,11 @@ export default function HistoryScreen() {
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              <Text style={styles.listHeaderText}>Tap a record to expand details</Text>
+            </View>
+          }
         />
       )}
     </View>
@@ -112,65 +117,64 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  topBar: {
-    paddingTop: Platform.OS === 'android' ? 50 : 56,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.text,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
   exportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
   },
   exportBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
+    shadowOpacity: 0,
   },
   exportIcon: {
-    fontSize: 16,
+    fontSize: 13,
     color: '#fff',
     fontWeight: '700',
   },
   exportText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#fff',
   },
   listContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
+  },
+  listHeader: {
+    marginBottom: 10,
+  },
+  listHeaderText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
   center: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 40,
-    gap: 12,
+    gap: 14,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    marginTop: 8,
   },
   emptyIcon: {
-    fontSize: 48,
+    fontSize: 52,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: COLORS.textSub,
     textAlign: 'center',
@@ -180,5 +184,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     lineHeight: 22,
+    maxWidth: 300,
   },
 });

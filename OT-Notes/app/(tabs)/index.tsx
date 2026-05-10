@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { StudentPicker } from '@/components/StudentPicker';
 import { GoalSection } from '@/components/GoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
@@ -160,10 +161,7 @@ export default function AssessmentScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.container}>
-        <View style={styles.topBar}>
-          <Text style={styles.appTitle}>OT Assessment</Text>
-          <Text style={styles.timeStamp}>{timeLabel}</Text>
-        </View>
+        <ScreenHeader subtitle={timeLabel} />
 
         <ScrollView
           style={styles.scroll}
@@ -174,10 +172,10 @@ export default function AssessmentScreen() {
           <StudentPicker selected={form.student} onSelect={form.setStudent} />
 
           <View style={styles.card}>
-            <Text style={styles.sectionLabel}>Supervisor</Text>
+            <Text style={styles.sectionLabel}>Supervisor Name</Text>
             <TextInput
               style={styles.supervisorInput}
-              placeholder="Your name…"
+              placeholder="Your full name…"
               placeholderTextColor={COLORS.textMuted}
               value={form.supervisor}
               onChangeText={form.setSupervisor}
@@ -233,20 +231,25 @@ export default function AssessmentScreen() {
             }}
           />
 
-          <TouchableOpacity
-            style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-            onPress={handleSubmit}
-            disabled={submitting}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.submitText}>{submitting ? 'Saving…' : 'Save Assessment'}</Text>
-          </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.resetBtn}
+              onPress={form.reset}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.resetText}>Clear Form</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+              onPress={handleSubmit}
+              disabled={submitting}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.submitText}>{submitting ? 'Saving…' : 'Save Assessment'}</Text>
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity style={styles.resetBtn} onPress={form.reset}>
-            <Text style={styles.resetText}>Clear Form</Text>
-          </TouchableOpacity>
-
-          <View style={{ height: 40 }} />
+          <View style={{ height: 48 }} />
         </ScrollView>
       </View>
     </KeyboardAvoidingView>
@@ -261,33 +264,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  topBar: {
-    paddingTop: Platform.OS === 'android' ? 50 : 56,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  appTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.text,
-    letterSpacing: -0.5,
-  },
-  timeStamp: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    marginBottom: 2,
-  },
   scroll: {
     flex: 1,
   },
   scrollContent: {
     padding: 16,
-    paddingTop: 14,
+    paddingTop: 16,
   },
   card: {
     backgroundColor: COLORS.surface,
@@ -296,12 +278,14 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.leftAccent,
   },
   sectionLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
-    color: COLORS.textSub,
-    letterSpacing: 0.5,
+    color: COLORS.textMuted,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 10,
   },
@@ -310,32 +294,50 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     backgroundColor: COLORS.bg,
     borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderWidth: 1.5,
     borderColor: COLORS.border,
+    minHeight: 48,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
   },
   submitBtn: {
+    flex: 1,
     backgroundColor: COLORS.primary,
-    borderRadius: 16,
-    paddingVertical: 18,
+    borderRadius: 14,
+    paddingVertical: 17,
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
+    minHeight: 54,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
   },
   submitBtnDisabled: {
-    opacity: 0.6,
+    opacity: 0.55,
+    shadowOpacity: 0,
   },
   submitText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: '#fff',
     letterSpacing: 0.3,
   },
   resetBtn: {
-    borderRadius: 16,
-    paddingVertical: 14,
+    borderRadius: 14,
+    paddingVertical: 17,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    borderWidth: 1,
+    justifyContent: 'center',
+    borderWidth: 1.5,
     borderColor: COLORS.border,
+    minHeight: 54,
   },
   resetText: {
     fontSize: 15,

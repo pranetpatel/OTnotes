@@ -33,33 +33,33 @@ export const GOAL3_OPTIONS = [
 
 export const COLORS = {
   // Backgrounds
-  bg: '#0A1220',
-  surface: '#111D2E',
-  surfaceAlt: '#172538',
-  surfaceHighlight: '#1C2F46',
+  bg: '#EEF3FB',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F4F8FF',
+  surfaceHighlight: '#E6EEF9',
 
-  // Brand — SuperSwims blue + aqua
+  // Brand — SuperSwims blue
   primary: '#3B7FD9',
-  primaryDim: '#112040',
-  primaryLight: '#6AA3F0',
+  primaryDim: '#E4EEFB',
+  primaryLight: '#2B68C0',
 
-  // Selected / active state
-  accent: '#00D4FF',
-  accentDim: '#00222F',
+  // Selected / active state (darkened aqua — readable on white)
+  accent: '#007FAA',
+  accentDim: '#DFF5FC',
 
   // Semantic
-  success: '#34C77B',
-  danger: '#FF4757',
+  success: '#1A9E5A',
+  danger: '#D93025',
 
   // Text
-  text: '#FFFFFF',
-  textSub: '#7FA3C8',
-  textMuted: '#4A6A8A',
+  text: '#0C1A2E',
+  textSub: '#3D5A7A',
+  textMuted: '#7A96B4',
 
   // Structure
-  border: '#1A3050',
-  cardBorder: '#1C3358',
-  tabBar: '#07101C',
+  border: '#C4D6EE',
+  cardBorder: '#D0E0F2',
+  tabBar: '#FFFFFF',
 
   // Left-border accent on goal cards
   leftAccent: '#3B7FD9',

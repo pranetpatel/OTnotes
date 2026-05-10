@@ -26,6 +26,7 @@ interface Props {
 }
 
 export function VoiceNoteInput({ value, onChange, studentName, goalSelections }: Props) {
+  const AUTO_STOP_SILENCE_MS = 8000;
   const [listening, setListening] = useState(false);
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [permissionChecked, setPermissionChecked] = useState(false);
@@ -33,8 +34,47 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   const [error, setError] = useState('');
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const baseTextRef = useRef('');
+  const valueRef = useRef(value);
+  const lastTranscriptRef = useRef('');
+  const appendedSpeechRef = useRef('');
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  function clearSilenceTimer() {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }
+
+  function restartSilenceTimer() {
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      ExpoSpeechRecognitionModule.stop();
+      setListening(false);
+    }, AUTO_STOP_SILENCE_MS);
+  }
+
+  function ensureWebSpeechRecognitionGlobal(): boolean {
+    if (typeof window === 'undefined') return true;
+    const webkitSpeech = (window as any).webkitSpeechRecognition;
+    if (!(window as any).SpeechRecognition && webkitSpeech) {
+      (window as any).SpeechRecognition = webkitSpeech;
+    }
+    return Boolean((window as any).SpeechRecognition);
+  }
+
+  useEffect(() => {
+    const hasWebSpeech = ensureWebSpeechRecognitionGlobal();
+    if (!hasWebSpeech) {
+      setVoiceAvailable(false);
+      setPermissionChecked(true);
+      return;
+    }
+
     ExpoSpeechRecognitionModule.getPermissionsAsync()
       .then((res) => {
         setVoiceAvailable(Boolean(res.granted));
@@ -46,22 +86,58 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   useSpeechRecognitionEvent('start', () => {
     setListening(true);
     setError('');
+    baseTextRef.current = valueRef.current;
+    lastTranscriptRef.current = '';
+    appendedSpeechRef.current = '';
+    restartSilenceTimer();
   });
 
   useSpeechRecognitionEvent('end', () => {
     setListening(false);
+    clearSilenceTimer();
   });
 
   useSpeechRecognitionEvent('error', (event) => {
     setListening(false);
     setError(event.message || 'Speech recognition failed.');
+    clearSilenceTimer();
   });
 
   useSpeechRecognitionEvent('result', (event) => {
     const transcript = event.results?.[0]?.transcript?.trim();
     if (!transcript) return;
-    const prefix = baseTextRef.current.trim();
-    onChange(prefix ? `${prefix} ${transcript}` : transcript);
+    const previousTranscript = lastTranscriptRef.current;
+
+    let delta = '';
+    if (!previousTranscript) {
+      delta = transcript;
+    } else if (transcript.startsWith(previousTranscript)) {
+      delta = transcript.slice(previousTranscript.length).trim();
+    } else if (previousTranscript.startsWith(transcript)) {
+      delta = '';
+    } else {
+      delta = transcript;
+    }
+
+    if (delta) {
+      appendedSpeechRef.current = appendedSpeechRef.current
+        ? `${appendedSpeechRef.current} ${delta}`.trim()
+        : delta;
+      const prefix = baseTextRef.current.trim();
+      const merged = [prefix, appendedSpeechRef.current].filter(Boolean).join(' ').trim();
+      onChange(merged);
+    } else if (event.isFinal && transcript) {
+      // Keep intentional repetitions/stutters when recognizer finalizes unchanged segments.
+      appendedSpeechRef.current = appendedSpeechRef.current
+        ? `${appendedSpeechRef.current} ${transcript}`.trim()
+        : transcript;
+      const prefix = baseTextRef.current.trim();
+      const merged = [prefix, appendedSpeechRef.current].filter(Boolean).join(' ').trim();
+      onChange(merged);
+    }
+
+    lastTranscriptRef.current = transcript;
+    restartSilenceTimer();
   });
 
   useEffect(() => {
@@ -78,14 +154,27 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
     }
   }, [listening, pulseAnim]);
 
+  useEffect(() => {
+    return () => {
+      clearSilenceTimer();
+    };
+  }, []);
+
   async function toggleListen() {
     setError('');
     if (listening) {
+      clearSilenceTimer();
       ExpoSpeechRecognitionModule.stop();
       return;
     }
 
     try {
+      if (!ensureWebSpeechRecognitionGlobal()) {
+        setVoiceAvailable(false);
+        setError('Speech recognition is not supported in this browser. Please type notes manually.');
+        return;
+      }
+
       const permission = permissionChecked
         ? await ExpoSpeechRecognitionModule.getPermissionsAsync()
         : await ExpoSpeechRecognitionModule.requestPermissionsAsync();

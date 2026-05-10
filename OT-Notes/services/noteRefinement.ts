@@ -8,11 +8,6 @@ type RefinementContext = {
   };
 };
 
-type OpenAIResponsesOutput = {
-  type: string;
-  content?: Array<{ type: string; text?: string }>;
-};
-
 export async function refineNoteWithOpenAI(rawNote: string, context: RefinementContext): Promise<string> {
   const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
   if (!apiKey) {
@@ -24,51 +19,54 @@ export async function refineNoteWithOpenAI(rawNote: string, context: RefinementC
     throw new Error('Add some note text before refining.');
   }
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
+  const promptPayload = {
+    student: context.studentName ?? 'Unknown student',
+    goals: context.goalSelections,
+    rawTranscription: cleanNote,
+    formattingRules: [
+      'Return only the refined note text.',
+      'No bullet points.',
+      'Use professional OT language.',
+      'Keep it brief and chart-ready.',
+    ],
+  };
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4.1-mini',
-      input: [
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      messages: [
         {
           role: 'system',
-          content:
-            'You rewrite OT session dictation into concise, professional clinical notes. Keep facts unchanged. Do not invent observations. Keep one short paragraph with clear, objective language.',
+          content: 'You rewrite OT session dictation into concise, professional clinical notes. Keep facts unchanged. Do not invent observations. Keep one short paragraph with clear, objective language.',
         },
         {
           role: 'user',
-          content: JSON.stringify({
-            student: context.studentName ?? 'Unknown student',
-            goals: context.goalSelections,
-            rawTranscription: cleanNote,
-            formattingRules: [
-              'Return only the refined note text.',
-              'No bullet points.',
-              'Use professional OT language.',
-              'Keep it brief and chart-ready.',
-            ],
-          }),
+          content: JSON.stringify(promptPayload),
         },
       ],
     }),
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI refinement failed (${response.status}): ${body}`);
+    let message = `OpenAI refinement failed (${response.status}).`;
+    try {
+      const body = await response.json();
+      const apiMessage = body?.error?.message;
+      if (apiMessage) message = `OpenAI refinement failed: ${apiMessage}`;
+    } catch {
+      // Ignore parse errors and keep generic message.
+    }
+    throw new Error(message);
   }
 
   const json = await response.json();
-  const outputs = (json.output ?? []) as OpenAIResponsesOutput[];
-  const text = outputs
-    .flatMap((entry) => entry.content ?? [])
-    .filter((entry) => entry.type === 'output_text' && Boolean(entry.text))
-    .map((entry) => entry.text?.trim() ?? '')
-    .join('\n')
-    .trim();
+  const text = json?.choices?.[0]?.message?.content?.trim?.() ?? '';
 
   if (!text) {
     throw new Error('OpenAI returned an empty refinement.');
