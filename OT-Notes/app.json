@@ -9,9 +9,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Microphone access is used to record voice notes during OT sessions.",
+        "NSSpeechRecognitionUsageDescription": "Speech recognition is used to transcribe voice notes during OT sessions."
+      }
     },
     "android": {
+      "permissions": [
+        "RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -39,7 +46,7 @@
           }
         }
       ],
-      "expo-sqlite"
+      "expo-speech-recognition"
     ],
     "experiments": {
       "typedRoutes": true,

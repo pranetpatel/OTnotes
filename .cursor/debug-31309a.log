@@ -1,0 +1,6 @@
+{"sessionId":"31309a","runId":"initial","hypothesisId":"H0","location":"app/(tabs)/index.tsx:AssessmentScreen:mount","message":"Assessment screen mounted","data":{},"timestamp":1778426843682}
+{"sessionId":"31309a","runId":"initial","hypothesisId":"H9","location":"services/database.ts:initDatabase:portable","message":"Using portable storage backend","data":{"hasLocalStorage":true},"timestamp":1778426843693}
+{"sessionId":"31309a","runId":"initial","hypothesisId":"H0","location":"app/_layout.tsx:RootLayout:useEffect","message":"Root layout mounted","data":{},"timestamp":1778426843692}
+{"sessionId":"31309a","runId":"initial","hypothesisId":"H9","location":"services/database.ts:getAllAssessments:rows","message":"Fetched assessments","data":{"rowCount":0},"timestamp":1778426868604}
+{"sessionId":"31309a","runId":"initial","hypothesisId":"H4","location":"app/(tabs)/index.tsx:handleSubmit:validationError","message":"Submit blocked by validation","data":{"error":"Please enter supervisor name.","hasStudent":true,"supervisorLength":0,"goal1Count":0,"goal2PrimaryCount":1,"goal2CoordCount":0,"goal3Count":1},"timestamp":1778426879901}
+{"sessionId":"31309a","runId":"initial","hypothesisId":"H9","location":"services/database.ts:getAllAssessments:rows","message":"Fetched assessments","data":{"rowCount":0},"timestamp":1778426882218}
