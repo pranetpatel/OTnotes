@@ -612,7 +612,7 @@ export default function AdminScreen() {
         <PinModal
           visible={showPinModal}
           onSuccess={handlePinSuccess}
-          onCancel={() => router.push('/')}
+          onCancel={() => { setShowPinModal(false); router.push('/'); }}
         />
         {!showPinModal && (
           <View style={styles.center}>
