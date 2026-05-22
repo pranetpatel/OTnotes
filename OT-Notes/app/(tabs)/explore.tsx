@@ -23,21 +23,18 @@ export default function HistoryScreen() {
 
   const loadData = useCallback(() => {
     setLoading(true);
-    try {
-      const data = getAllAssessments();
-      setAssessments(data);
-    } catch (e: any) {
-      Alert.alert('Error', 'Could not load assessments: ' + e?.message);
-    } finally {
-      setLoading(false);
-    }
+    getAllAssessments()
+      .then(data => setAssessments(data))
+      .catch((e: any) => Alert.alert('Error', 'Could not load assessments: ' + e?.message))
+      .finally(() => setLoading(false));
   }, []);
 
   useFocusEffect(loadData);
 
   function handleDelete(id: number) {
-    deleteAssessment(id);
-    setAssessments(prev => prev.filter(a => a.id !== id));
+    deleteAssessment(id)
+      .then(() => setAssessments(prev => prev.filter(a => a.id !== id)))
+      .catch((e: any) => Alert.alert('Delete Error', e?.message));
   }
 
   async function handleExport() {

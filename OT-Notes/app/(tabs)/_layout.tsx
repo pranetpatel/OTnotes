@@ -3,7 +3,7 @@ import React from 'react';
 import { Platform, Text, View, StyleSheet } from 'react-native';
 import { COLORS } from '@/constants/data';
 
-function TabIcon({ emoji, label, focused }: { emoji: string; label: string; focused: boolean }) {
+function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
     <View style={[styles.tabIcon, focused && styles.tabIconFocused]}>
       <Text style={styles.tabEmoji}>{emoji}</Text>
@@ -37,18 +37,28 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Assessment',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📋" label="Assessment" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📋" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: 'Schedule',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📅" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Records',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon emoji="📁" label="Records" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📁" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} />,
         }}
       />
     </Tabs>

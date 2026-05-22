@@ -11,6 +11,7 @@ import {
   Image,
 } from 'react-native';
 import { COLORS, STUDENTS } from '@/constants/data';
+import { GoalSheetModal } from '@/components/GoalSheetModal';
 
 interface Props {
   selected: string | null;
@@ -28,6 +29,7 @@ function initials(name: string): string {
 
 export function StudentPicker({ selected, onSelect }: Props) {
   const [visible, setVisible] = useState(false);
+  const [goalSheetVisible, setGoalSheetVisible] = useState(false);
   const [query, setQuery] = useState('');
 
   const filtered = STUDENTS.filter(s =>
@@ -42,6 +44,12 @@ export function StudentPicker({ selected, onSelect }: Props) {
 
   return (
     <>
+      <GoalSheetModal
+        studentName={selected}
+        visible={goalSheetVisible}
+        onClose={() => setGoalSheetVisible(false)}
+      />
+
       <TouchableOpacity
         style={[styles.trigger, selected ? styles.triggerSelected : styles.triggerEmpty]}
         onPress={() => setVisible(true)}
@@ -56,6 +64,15 @@ export function StudentPicker({ selected, onSelect }: Props) {
               <Text style={styles.triggerCaption}>Student</Text>
               <Text style={styles.triggerName}>{selected}</Text>
             </View>
+            <TouchableOpacity
+              style={styles.goalSheetBtn}
+              onPress={(e) => { e.stopPropagation(); setGoalSheetVisible(true); }}
+              activeOpacity={0.75}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            >
+              <Text style={styles.goalSheetIcon}>📋</Text>
+              <Text style={styles.goalSheetBtnText}>Goals</Text>
+            </TouchableOpacity>
             <View style={styles.changeBadge}>
               <Text style={styles.changeBadgeText}>Change</Text>
             </View>
@@ -217,6 +234,25 @@ const styles = StyleSheet.create({
   triggerPlaceholder: {
     fontSize: 15,
     color: COLORS.textMuted,
+  },
+  goalSheetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.accentDim,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
+  },
+  goalSheetIcon: {
+    fontSize: 12,
+  },
+  goalSheetBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.accent,
   },
   changeBadge: {
     backgroundColor: COLORS.surfaceHighlight,

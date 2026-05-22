@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,15 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { StudentPicker } from '@/components/StudentPicker';
 import { GoalSection } from '@/components/GoalSection';
+import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { saveAssessment } from '@/services/database';
+import { getCurrentSlot, getNextSlot, formatMinutes, toISODate } from '@/constants/schedule';
+import { getStudentsForSlot } from '@/services/scheduleStorage';
 import {
   COLORS,
   GOAL1_LABEL,
@@ -24,6 +28,7 @@ import {
   GOAL2_PRIMARY_OPTIONS,
   GOAL3_LABEL,
   GOAL3_OPTIONS,
+  STUDENT_GOALS,
 } from '@/constants/data';
 
 function useForm() {
@@ -33,6 +38,7 @@ function useForm() {
   const [goal2Primary, setGoal2Primary] = useState<string[]>([]);
   const [goal2Coord, setGoal2Coord] = useState<string[]>([]);
   const [goal3, setGoal3] = useState<string[]>([]);
+  const [safetySkills, setSafetySkills] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
 
   function reset() {
@@ -42,6 +48,7 @@ function useForm() {
     setGoal2Primary([]);
     setGoal2Coord([]);
     setGoal3([]);
+    setSafetySkills([]);
     setNotes('');
   }
 
@@ -52,6 +59,7 @@ function useForm() {
     goal2Primary, setGoal2Primary,
     goal2Coord, setGoal2Coord,
     goal3, setGoal3,
+    safetySkills, setSafetySkills,
     notes, setNotes,
     reset,
   };
@@ -60,29 +68,32 @@ function useForm() {
 export default function AssessmentScreen() {
   const form = useForm();
   const [submitting, setSubmitting] = useState(false);
-  const debugEndpoint = 'http://127.0.0.1:7734/ingest/c079974f-ddd0-47ec-9f6b-db9a6b9cfe8e';
+  const [activeStudents, setActiveStudents] = useState<string[]>([]);
+  const [nextStudents, setNextStudents] = useState<string[]>([]);
 
-  function debugLog(hypothesisId: string, location: string, message: string, data: Record<string, unknown>) {
-    fetch(debugEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '31309a' },
-      body: JSON.stringify({
-        sessionId: '31309a',
-        runId: 'initial',
-        hypothesisId,
-        location,
-        message,
-        data,
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
+  const studentSafetySkills = form.student ? (STUDENT_GOALS[form.student]?.safetySkills ?? null) : null;
+
+  function handleSelectStudent(name: string) {
+    form.setStudent(name);
+    form.setSafetySkills([]);
   }
 
-  useEffect(() => {
-    // #region agent log
-    debugLog('H0', 'app/(tabs)/index.tsx:AssessmentScreen:mount', 'Assessment screen mounted', {});
-    // #endregion
-  }, []);
+  useFocusEffect(useCallback(() => {
+    const n = new Date();
+    const currSlot = getCurrentSlot(n);
+    const nextInfo = getNextSlot(n);
+    const isoToday = toISODate(n);
+    if (currSlot) {
+      getStudentsForSlot(n.getDay(), currSlot.id, isoToday).then(setActiveStudents).catch(() => {});
+    } else {
+      setActiveStudents([]);
+    }
+    if (nextInfo) {
+      getStudentsForSlot(n.getDay(), nextInfo.slot.id, isoToday).then(setNextStudents).catch(() => {});
+    } else {
+      setNextStudents([]);
+    }
+  }, []));
 
   function validate(): string | null {
     if (!form.student) return 'Please select a student.';
@@ -96,27 +107,15 @@ export default function AssessmentScreen() {
     return null;
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const err = validate();
     if (err) {
-      // #region agent log
-      debugLog('H4', 'app/(tabs)/index.tsx:handleSubmit:validationError', 'Submit blocked by validation', {
-        error: err,
-        hasStudent: Boolean(form.student),
-        supervisorLength: form.supervisor.trim().length,
-        goal1Count: form.goal1.length,
-        goal2PrimaryCount: form.goal2Primary.length,
-        goal2CoordCount: form.goal2Coord.length,
-        goal3Count: form.goal3.length,
-      });
-      // #endregion
       Alert.alert('Missing Info', err);
       return;
     }
-
     setSubmitting(true);
     try {
-      saveAssessment({
+      await saveAssessment({
         student_name: form.student!,
         supervisor_name: form.supervisor.trim(),
         timestamp: new Date().toISOString(),
@@ -124,22 +123,13 @@ export default function AssessmentScreen() {
         goal2_primary_selections: form.goal2Primary,
         goal2_coordination_selections: form.goal2Coord,
         goal3_selections: form.goal3,
+        safety_skill_selections: form.safetySkills,
         notes: form.notes.trim(),
       });
-      // #region agent log
-      debugLog('H5', 'app/(tabs)/index.tsx:handleSubmit:saveSuccess', 'Submit flow saved successfully', {
-        student: form.student,
-      });
-      // #endregion
       Alert.alert('Saved!', `Assessment for ${form.student} has been recorded.`, [
         { text: 'OK', onPress: () => form.reset() },
       ]);
     } catch (e: any) {
-      // #region agent log
-      debugLog('H5', 'app/(tabs)/index.tsx:handleSubmit:saveError', 'Submit flow failed', {
-        error: e?.message ?? 'unknown',
-      });
-      // #endregion
       Alert.alert('Error', e?.message ?? 'Failed to save assessment.');
     } finally {
       setSubmitting(false);
@@ -155,6 +145,9 @@ export default function AssessmentScreen() {
     minute: '2-digit',
   });
 
+  const activeSlot = getCurrentSlot(now);
+  const nextSlotInfo = getNextSlot(now);
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -163,91 +156,134 @@ export default function AssessmentScreen() {
       <View style={styles.container}>
         <ScreenHeader subtitle={timeLabel} />
 
+        {/* Session status banner */}
+        {activeSlot && activeStudents.length > 0 && (
+          <View style={styles.sessionBanner}>
+            <Text style={styles.sessionBannerLabel}>NOW · {activeSlot.label}</Text>
+            <Text style={styles.sessionBannerKids} numberOfLines={1}>
+              {activeStudents.join('  ·  ')}
+            </Text>
+          </View>
+        )}
+        {!activeSlot && nextSlotInfo && nextStudents.length > 0 && (
+          <View style={[styles.sessionBanner, styles.sessionBannerNext]}>
+            <Text style={[styles.sessionBannerLabel, styles.sessionBannerLabelNext]}>
+              IN {formatMinutes(nextSlotInfo.minutesUntil)} · {nextSlotInfo.slot.label}
+            </Text>
+            <Text style={[styles.sessionBannerKids, styles.sessionBannerKidsNext]} numberOfLines={1}>
+              {nextStudents.join('  ·  ')}
+            </Text>
+          </View>
+        )}
+
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <StudentPicker selected={form.student} onSelect={form.setStudent} />
+          <StudentPicker selected={form.student} onSelect={handleSelectStudent} />
 
-          <View style={styles.card}>
-            <Text style={styles.sectionLabel}>Supervisor Name</Text>
-            <TextInput
-              style={styles.supervisorInput}
-              placeholder="Your full name…"
-              placeholderTextColor={COLORS.textMuted}
-              value={form.supervisor}
-              onChangeText={form.setSupervisor}
-              autoCorrect={false}
-              returnKeyType="done"
-            />
-          </View>
+          {form.student && (
+            <>
+              <View style={styles.card}>
+                <Text style={styles.sectionLabel}>Supervisor Name</Text>
+                <TextInput
+                  style={styles.supervisorInput}
+                  placeholder="Your full name…"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={form.supervisor}
+                  onChangeText={form.setSupervisor}
+                  autoCorrect={false}
+                  returnKeyType="done"
+                />
+              </View>
 
-          <GoalSection
-            goalNumber={1}
-            title={GOAL1_LABEL}
-            groups={[
-              { options: GOAL1_OPTIONS, selected: form.goal1, onChange: form.setGoal1 },
-            ]}
-          />
+              {studentSafetySkills && (
+                <SafetyGoalSection
+                  safetySkills={studentSafetySkills}
+                  selected={form.safetySkills}
+                  onChange={form.setSafetySkills}
+                />
+              )}
 
-          <GoalSection
-            goalNumber={2}
-            title={GOAL2_LABEL}
-            groups={[
-              {
-                label: 'Effort level',
-                options: GOAL2_PRIMARY_OPTIONS,
-                selected: form.goal2Primary,
-                onChange: form.setGoal2Primary,
-              },
-              {
-                label: 'Arm/leg coordination',
-                options: GOAL2_COORDINATION_OPTIONS,
-                selected: form.goal2Coord,
-                onChange: form.setGoal2Coord,
-              },
-            ]}
-          />
+              <GoalSection
+                goalNumber={1}
+                title={GOAL1_LABEL}
+                groups={[
+                  { options: GOAL1_OPTIONS, selected: form.goal1, onChange: form.setGoal1 },
+                ]}
+              />
 
-          <GoalSection
-            goalNumber={3}
-            title={GOAL3_LABEL}
-            groups={[
-              { options: GOAL3_OPTIONS, selected: form.goal3, onChange: form.setGoal3 },
-            ]}
-          />
+              <GoalSection
+                goalNumber={2}
+                title={GOAL2_LABEL}
+                groups={[
+                  {
+                    label: 'Effort level',
+                    options: GOAL2_PRIMARY_OPTIONS,
+                    selected: form.goal2Primary,
+                    onChange: form.setGoal2Primary,
+                  },
+                  {
+                    label: 'Arm/leg coordination',
+                    options: GOAL2_COORDINATION_OPTIONS,
+                    selected: form.goal2Coord,
+                    onChange: form.setGoal2Coord,
+                  },
+                ]}
+              />
 
-          <VoiceNoteInput
-            value={form.notes}
-            onChange={form.setNotes}
-            studentName={form.student}
-            goalSelections={{
-              goal1: form.goal1,
-              goal2Primary: form.goal2Primary,
-              goal2Coord: form.goal2Coord,
-              goal3: form.goal3,
-            }}
-          />
+              <GoalSection
+                goalNumber={3}
+                title={GOAL3_LABEL}
+                groups={[
+                  { options: GOAL3_OPTIONS, selected: form.goal3, onChange: form.setGoal3 },
+                ]}
+              />
 
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.resetBtn}
-              onPress={form.reset}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.resetText}>Clear Form</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.submitText}>{submitting ? 'Saving…' : 'Save Assessment'}</Text>
-            </TouchableOpacity>
-          </View>
+              <VoiceNoteInput
+                value={form.notes}
+                onChange={form.setNotes}
+                studentName={form.student}
+                goalSelections={{
+                  goal1: form.goal1,
+                  goal2Primary: form.goal2Primary,
+                  goal2Coord: form.goal2Coord,
+                  goal3: form.goal3,
+                }}
+              />
+            </>
+          )}
+
+          {form.student && (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.resetBtn}
+                onPress={() =>
+                  Alert.alert(
+                    'Clear Form',
+                    'Are you sure? All selections for this session will be lost.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Clear', style: 'destructive', onPress: form.reset },
+                    ]
+                  )
+                }
+                activeOpacity={0.75}
+              >
+                <Text style={styles.resetText}>Clear Form</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+                onPress={handleSubmit}
+                disabled={submitting}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.submitText}>{submitting ? 'Saving…' : 'Save Assessment'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <View style={{ height: 48 }} />
         </ScrollView>
@@ -344,4 +380,30 @@ const styles = StyleSheet.create({
     color: COLORS.textSub,
     fontWeight: '600',
   },
+  sessionBanner: {
+    backgroundColor: '#E6F9EE',
+    borderBottomWidth: 1,
+    borderBottomColor: '#BBE8CC',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 2,
+  },
+  sessionBannerNext: {
+    backgroundColor: COLORS.primaryDim,
+    borderBottomColor: COLORS.border,
+  },
+  sessionBannerLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.success,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  sessionBannerLabelNext: { color: COLORS.primary },
+  sessionBannerKids: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  sessionBannerKidsNext: { color: COLORS.textSub },
 });

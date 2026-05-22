@@ -67,6 +67,37 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
     return Boolean((window as any).SpeechRecognition);
   }
 
+  function appendTranscriptDelta(existing: string, incoming: string): string {
+    const current = existing.trim();
+    const next = incoming.trim();
+    if (!next) return current;
+    if (!current) return next;
+    if (next === current || next.startsWith(current)) return next;
+    if (current.startsWith(next)) return current;
+
+    const currentWords = current.split(/\s+/);
+    const nextWords = next.split(/\s+/);
+    const maxOverlap = Math.min(currentWords.length, nextWords.length);
+    let overlap = 0;
+
+    for (let size = maxOverlap; size > 0; size -= 1) {
+      const suffix = currentWords.slice(currentWords.length - size).join(' ').toLowerCase();
+      const prefix = nextWords.slice(0, size).join(' ').toLowerCase();
+      if (suffix === prefix) {
+        overlap = size;
+        break;
+      }
+    }
+
+    if (overlap > 0) {
+      const tail = nextWords.slice(overlap).join(' ').trim();
+      return tail ? `${current} ${tail}` : current;
+    }
+
+    // If recognition restarts with a different phrase, append without duplicating exact repeated chunk.
+    return current.toLowerCase().endsWith(next.toLowerCase()) ? current : `${current} ${next}`;
+  }
+
   useEffect(() => {
     const hasWebSpeech = ensureWebSpeechRecognitionGlobal();
     if (!hasWebSpeech) {
@@ -120,17 +151,7 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
     }
 
     if (delta) {
-      appendedSpeechRef.current = appendedSpeechRef.current
-        ? `${appendedSpeechRef.current} ${delta}`.trim()
-        : delta;
-      const prefix = baseTextRef.current.trim();
-      const merged = [prefix, appendedSpeechRef.current].filter(Boolean).join(' ').trim();
-      onChange(merged);
-    } else if (event.isFinal && transcript) {
-      // Keep intentional repetitions/stutters when recognizer finalizes unchanged segments.
-      appendedSpeechRef.current = appendedSpeechRef.current
-        ? `${appendedSpeechRef.current} ${transcript}`.trim()
-        : transcript;
+      appendedSpeechRef.current = appendTranscriptDelta(appendedSpeechRef.current, delta);
       const prefix = baseTextRef.current.trim();
       const merged = [prefix, appendedSpeechRef.current].filter(Boolean).join(' ').trim();
       onChange(merged);

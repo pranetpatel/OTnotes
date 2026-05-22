@@ -28,6 +28,8 @@ export async function refineNoteWithOpenAI(rawNote: string, context: RefinementC
       'No bullet points.',
       'Use professional OT language.',
       'Keep it brief and chart-ready.',
+      'Remove filler words and stutters (for example: uh, um, repeated fragments).',
+      'Consolidate repeated words/phrases into one clean mention unless repetition changes clinical meaning.',
     ],
   };
 
@@ -43,7 +45,7 @@ export async function refineNoteWithOpenAI(rawNote: string, context: RefinementC
       messages: [
         {
           role: 'system',
-          content: 'You rewrite OT session dictation into concise, professional clinical notes. Keep facts unchanged. Do not invent observations. Keep one short paragraph with clear, objective language.',
+          content: 'You rewrite OT session dictation into concise, professional clinical notes. Keep facts unchanged. Do not invent observations. Keep one short paragraph with clear, objective language. Clean up stutters and duplicate phrase repetition.',
         },
         {
           role: 'user',
