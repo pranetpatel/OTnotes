@@ -75,6 +75,7 @@ export default function AssessmentScreen() {
   const form = useForm();
   const params = useLocalSearchParams<{ student?: string }>();
   const [submitting, setSubmitting] = useState(false);
+  const [savedStudent, setSavedStudent] = useState<string | null>(null);
   const [activeStudents, setActiveStudents] = useState<string[]>([]);
   const [nextStudents, setNextStudents] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -148,14 +149,41 @@ export default function AssessmentScreen() {
         safety_skill_selections: form.safetySkills,
         notes: form.notes.trim(),
       });
-      Alert.alert('Saved!', `Assessment for ${form.student} has been recorded.`, [
-        { text: 'OK', onPress: () => { form.reset(); setFieldErrors({}); setReportDate(new Date()); } },
-      ]);
+      setSavedStudent(form.student);
+      form.reset();
+      setFieldErrors({});
+      setReportDate(new Date());
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Failed to save assessment.');
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleNewAssessment() {
+    setSavedStudent(null);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }
+
+  if (savedStudent) {
+    return (
+      <View style={styles.container}>
+        <ScreenHeader subtitle="Assessment complete" />
+        <View style={styles.completionContainer}>
+          <View style={styles.completionCard}>
+            <Text style={styles.completionIcon}>✓</Text>
+            <Text style={styles.completionTitle}>Saved!</Text>
+            <Text style={styles.completionStudent}>{savedStudent}</Text>
+            <Text style={styles.completionBody}>
+              This session has been recorded in the history tab.
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.newAssessmentBtn} onPress={handleNewAssessment} activeOpacity={0.8}>
+            <Text style={styles.newAssessmentText}>Start New Assessment</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
 
   const now = new Date();
@@ -569,5 +597,70 @@ const styles = StyleSheet.create({
     color: '#C62828',
     fontWeight: '600',
     marginTop: 8,
+  },
+  completionContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 24,
+  },
+  completionCard: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#BBE8CC',
+    shadowColor: COLORS.success,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  completionIcon: {
+    fontSize: 52,
+    color: COLORS.success,
+    fontWeight: '700',
+    lineHeight: 62,
+  },
+  completionTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: COLORS.success,
+    letterSpacing: 0.2,
+  },
+  completionStudent: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  completionBody: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginTop: 4,
+  },
+  newAssessmentBtn: {
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    paddingVertical: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  newAssessmentText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
 });
