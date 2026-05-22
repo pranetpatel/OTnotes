@@ -9,7 +9,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { AssessmentCard } from '@/components/AssessmentCard';
 import { getAllAssessments, deleteAssessment, Assessment } from '@/services/database';
@@ -17,6 +17,7 @@ import { exportToCSV } from '@/services/csvExport';
 import { COLORS } from '@/constants/data';
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -35,6 +36,10 @@ export default function HistoryScreen() {
     deleteAssessment(id)
       .then(() => setAssessments(prev => prev.filter(a => a.id !== id)))
       .catch((e: any) => Alert.alert('Delete Error', e?.message));
+  }
+
+  function handleEdit(id: number) {
+    router.push({ pathname: '/edit-assessment', params: { id: String(id) } });
   }
 
   async function handleExport() {
@@ -94,7 +99,7 @@ export default function HistoryScreen() {
           data={assessments}
           keyExtractor={item => String(item.id)}
           renderItem={({ item }) => (
-            <AssessmentCard assessment={item} onDelete={handleDelete} />
+            <AssessmentCard assessment={item} onDelete={handleDelete} onEdit={handleEdit} />
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

@@ -28,9 +28,54 @@ interface Props {
 const RECOGNITION_OPTIONS = {
   lang: 'en-US',
   interimResults: true,
-  continuous: false, // iOS doesn't support native continuous mode; we restart manually
+  continuous: false,
   addsPunctuation: true,
 } as const;
+
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
+// Only called on-demand (never on mount) so it doesn't interfere with keyboard dictation
+function ensureWebSpeechRecognitionGlobal(): boolean {
+  if (typeof window === 'undefined') return true;
+  const webkitSpeech = (window as any).webkitSpeechRecognition;
+  if (!(window as any).SpeechRecognition && webkitSpeech) {
+    (window as any).SpeechRecognition = webkitSpeech;
+  }
+  return Boolean((window as any).SpeechRecognition);
+}
+
+// Request iOS speech permission by briefly starting webkitSpeechRecognition.
+// This triggers the system prompt without us needing to handle results.
+function requestIOSSpeechPermission(): Promise<'granted' | 'denied' | 'unavailable'> {
+  return new Promise((resolve) => {
+    const SR = (window as any).webkitSpeechRecognition;
+    if (!SR) { resolve('unavailable'); return; }
+    const r = new SR();
+    r.continuous = false;
+    r.interimResults = false;
+    let resolved = false;
+    const done = (result: 'granted' | 'denied' | 'unavailable') => {
+      if (!resolved) { resolved = true; resolve(result); }
+    };
+    r.onstart = () => { r.stop(); done('granted'); };
+    r.onresult = () => { r.stop(); done('granted'); };
+    r.onerror = (e: any) => {
+      const msg: string = e.message ?? '';
+      if (msg.includes('1107') || msg.includes('kAFAssistant') || msg.includes('kATAssistant')) {
+        done('unavailable');
+      } else if (e.error === 'not-allowed') {
+        done('denied');
+      } else {
+        done('granted');
+      }
+    };
+    r.onend = () => done('granted');
+    try { r.start(); } catch { done('unavailable'); }
+  });
+}
 
 export function VoiceNoteInput({ value, onChange, studentName, goalSelections }: Props) {
   const AUTO_STOP_SILENCE_MS = 8000;
@@ -39,14 +84,15 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [refining, setRefining] = useState(false);
   const [error, setError] = useState('');
+  const [keyboardHint, setKeyboardHint] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const baseTextRef = useRef('');
   const valueRef = useRef(value);
   const lastTranscriptRef = useRef('');
   const appendedSpeechRef = useRef('');
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Tracks whether the user intends to be recording (so we can restart on iOS session end)
   const intendedListeningRef = useRef(false);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     valueRef.current = value;
@@ -68,15 +114,6 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
     }, AUTO_STOP_SILENCE_MS);
   }
 
-  function ensureWebSpeechRecognitionGlobal(): boolean {
-    if (typeof window === 'undefined') return true;
-    const webkitSpeech = (window as any).webkitSpeechRecognition;
-    if (!(window as any).SpeechRecognition && webkitSpeech) {
-      (window as any).SpeechRecognition = webkitSpeech;
-    }
-    return Boolean((window as any).SpeechRecognition);
-  }
-
   function appendTranscriptDelta(existing: string, incoming: string): string {
     const current = existing.trim();
     const next = incoming.trim();
@@ -93,33 +130,21 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
     for (let size = maxOverlap; size > 0; size -= 1) {
       const suffix = currentWords.slice(currentWords.length - size).join(' ').toLowerCase();
       const prefix = nextWords.slice(0, size).join(' ').toLowerCase();
-      if (suffix === prefix) {
-        overlap = size;
-        break;
-      }
+      if (suffix === prefix) { overlap = size; break; }
     }
 
     if (overlap > 0) {
       const tail = nextWords.slice(overlap).join(' ').trim();
       return tail ? `${current} ${tail}` : current;
     }
-
-    // If recognition restarts with a different phrase, append without duplicating exact repeated chunk.
     return current.toLowerCase().endsWith(next.toLowerCase()) ? current : `${current} ${next}`;
   }
 
+  // Check permission state on mount — but do NOT touch window.SpeechRecognition here,
+  // as that interferes with the native iOS keyboard dictation.
   useEffect(() => {
-    const hasWebSpeech = ensureWebSpeechRecognitionGlobal();
-    if (!hasWebSpeech) {
-      setVoiceAvailable(false);
-      setPermissionChecked(true);
-      return;
-    }
-
     ExpoSpeechRecognitionModule.getPermissionsAsync()
-      .then((res) => {
-        setVoiceAvailable(Boolean(res.granted));
-      })
+      .then((res) => setVoiceAvailable(Boolean(res.granted)))
       .catch(() => setVoiceAvailable(false))
       .finally(() => setPermissionChecked(true));
   }, []);
@@ -134,8 +159,6 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   });
 
   useSpeechRecognitionEvent('end', () => {
-    // If the user is still meant to be recording, restart the session.
-    // This simulates continuous mode on iOS which doesn't support it natively.
     if (intendedListeningRef.current) {
       ExpoSpeechRecognitionModule.start(RECOGNITION_OPTIONS);
       return;
@@ -145,22 +168,27 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   });
 
   useSpeechRecognitionEvent('error', (event) => {
-    // KATAssistantErrorDomain 1107 = iOS speech server session reset.
-    // Restart transparently instead of surfacing it as a fatal error.
-    const isRecoverableIosError =
-      event.message?.includes('1107') || event.error === 'no-speech';
-    if (intendedListeningRef.current && isRecoverableIosError) {
+    const is1107 = event.message?.includes('1107') || event.message?.includes('kAFAssistant') || event.message?.includes('kATAssistant');
+    const isNoSpeech = event.error === 'no-speech';
+
+    if (isNoSpeech && intendedListeningRef.current) {
       setTimeout(() => {
-        if (intendedListeningRef.current) {
-          ExpoSpeechRecognitionModule.start(RECOGNITION_OPTIONS);
-        }
+        if (intendedListeningRef.current) ExpoSpeechRecognitionModule.start(RECOGNITION_OPTIONS);
       }, 300);
       return;
     }
+
     intendedListeningRef.current = false;
     setListening(false);
-    setError(event.message || 'Speech recognition failed.');
     clearSilenceTimer();
+
+    if (is1107) {
+      setKeyboardHint(true);
+      inputRef.current?.focus();
+      setError('');
+      return;
+    }
+    setError(event.message || 'Speech recognition failed.');
   });
 
   useSpeechRecognitionEvent('result', (event) => {
@@ -205,13 +233,13 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   }, [listening, pulseAnim]);
 
   useEffect(() => {
-    return () => {
-      clearSilenceTimer();
-    };
+    return () => { clearSilenceTimer(); };
   }, []);
 
   async function toggleListen() {
     setError('');
+    setKeyboardHint(false);
+
     if (listening) {
       intendedListeningRef.current = false;
       clearSilenceTimer();
@@ -219,12 +247,28 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
       return;
     }
 
-    try {
+    // On iOS in a browser, webkitSpeechRecognition is unreliable.
+    // Trigger a system permission prompt, then guide the user to keyboard dictation.
+    if (isIOS() && typeof window !== 'undefined') {
       if (!ensureWebSpeechRecognitionGlobal()) {
-        setVoiceAvailable(false);
-        setError('Speech recognition is not supported in this browser. Please type notes manually.');
+        setKeyboardHint(true);
+        inputRef.current?.focus();
         return;
       }
+      const status = await requestIOSSpeechPermission();
+      if (status === 'denied') {
+        setError('Microphone access denied. Allow it in iOS Settings → Safari → Microphone.');
+        return;
+      }
+      // 'granted' or 'unavailable' — either way guide to keyboard dictation
+      setKeyboardHint(true);
+      inputRef.current?.focus();
+      return;
+    }
+
+    // Desktop / non-iOS: use expo-speech-recognition normally
+    try {
+      ensureWebSpeechRecognitionGlobal();
 
       const permission = permissionChecked
         ? await ExpoSpeechRecognitionModule.getPermissionsAsync()
@@ -297,18 +341,26 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
         </View>
       )}
 
-      {!listening && !voiceAvailable && permissionChecked && (
+      {keyboardHint && !listening && (
+        <View style={styles.hintBanner}>
+          <Text style={styles.hintText}>Tap the 🎤 on your keyboard (bottom right) to dictate</Text>
+        </View>
+      )}
+
+      {!listening && !voiceAvailable && permissionChecked && !keyboardHint && (
         <Text style={styles.helpText}>Voice unavailable. You can continue with manual typing.</Text>
       )}
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       <TextInput
+        ref={inputRef}
         style={styles.input}
-        placeholder={voiceAvailable ? 'Tap mic or type notes here...' : 'Type session notes here...'}
+        placeholder="Tap mic or type notes here..."
         placeholderTextColor={COLORS.textMuted}
         value={value}
         onChangeText={onChange}
+        onBlur={() => setKeyboardHint(false)}
         multiline
         numberOfLines={4}
         textAlignVertical="top"
@@ -396,6 +448,20 @@ const styles = StyleSheet.create({
     color: '#FF7070',
     fontSize: 14,
     fontWeight: '600',
+  },
+  hintBanner: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+  },
+  hintText: {
+    color: COLORS.textSub,
+    fontSize: 13,
+    fontWeight: '500',
   },
   errorText: {
     color: COLORS.danger,

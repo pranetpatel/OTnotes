@@ -29,6 +29,11 @@ export async function getAllAssessments(): Promise<Assessment[]> {
   return (data ?? []) as Assessment[];
 }
 
+export async function updateAssessment(id: number, assessment: Omit<Assessment, 'id'>): Promise<void> {
+  const { error } = await supabase.from('assessments').update(assessment).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function deleteAssessment(id: number): Promise<void> {
   const { error } = await supabase.from('assessments').delete().eq('id', id);
   if (error) throw new Error(error.message);

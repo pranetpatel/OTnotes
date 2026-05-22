@@ -6,6 +6,7 @@ import { COLORS } from '@/constants/data';
 interface Props {
   assessment: Assessment;
   onDelete: (id: number) => void;
+  onEdit?: (id: number) => void;
 }
 
 function Chip({ label, aqua }: { label: string; aqua?: boolean }) {
@@ -31,7 +32,7 @@ function GoalRow({ icon, label, items, aqua }: { icon: string; label: string; it
   );
 }
 
-export function AssessmentCard({ assessment, onDelete }: Props) {
+export function AssessmentCard({ assessment, onDelete, onEdit }: Props) {
   const [expanded, setExpanded] = useState(false);
   const dt = new Date(assessment.timestamp);
   const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -97,9 +98,20 @@ export function AssessmentCard({ assessment, onDelete }: Props) {
               </View>
             ) : null}
 
-            <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} activeOpacity={0.75}>
-              <Text style={styles.deleteText}>Delete Record</Text>
-            </TouchableOpacity>
+            <View style={styles.actionRow}>
+              {onEdit && (
+                <TouchableOpacity
+                  style={styles.editBtn}
+                  onPress={() => onEdit(assessment.id!)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.editText}>Edit</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} activeOpacity={0.75}>
+                <Text style={styles.deleteText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
       </View>
@@ -272,8 +284,24 @@ const styles = StyleSheet.create({
     color: COLORS.textSub,
     lineHeight: 21,
   },
+  actionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  editBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  editText: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
   deleteBtn: {
-    alignSelf: 'flex-end',
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: 8,

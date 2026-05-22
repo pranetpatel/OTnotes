@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -65,17 +65,26 @@ function useForm() {
   };
 }
 
+interface FieldErrors {
+  student?: string;
+  supervisor?: string;
+  goals?: string;
+}
+
 export default function AssessmentScreen() {
   const form = useForm();
   const [submitting, setSubmitting] = useState(false);
   const [activeStudents, setActiveStudents] = useState<string[]>([]);
   const [nextStudents, setNextStudents] = useState<string[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const scrollRef = useRef<ScrollView>(null);
 
   const studentSafetySkills = form.student ? (STUDENT_GOALS[form.student]?.safetySkills ?? null) : null;
 
   function handleSelectStudent(name: string) {
     form.setStudent(name);
     form.setSafetySkills([]);
+    setFieldErrors(e => ({ ...e, student: undefined }));
   }
 
   useFocusEffect(useCallback(() => {
@@ -95,24 +104,27 @@ export default function AssessmentScreen() {
     }
   }, []));
 
-  function validate(): string | null {
-    if (!form.student) return 'Please select a student.';
-    if (!form.supervisor.trim()) return 'Please enter supervisor name.';
+  function buildErrors(): FieldErrors {
+    const errs: FieldErrors = {};
+    if (!form.student) errs.student = 'Student not selected — tap to choose a student.';
+    if (!form.supervisor.trim()) errs.supervisor = 'Supervisor name is required.';
     const hasAnyGoal =
       form.goal1.length > 0 ||
       form.goal2Primary.length > 0 ||
       form.goal2Coord.length > 0 ||
       form.goal3.length > 0;
-    if (!hasAnyGoal) return 'Please select at least one goal indicator.';
-    return null;
+    if (!hasAnyGoal) errs.goals = 'Select at least one goal indicator before saving.';
+    return errs;
   }
 
   async function handleSubmit() {
-    const err = validate();
-    if (err) {
-      Alert.alert('Missing Info', err);
+    const errs = buildErrors();
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
+    setFieldErrors({});
     setSubmitting(true);
     try {
       await saveAssessment({
@@ -127,7 +139,7 @@ export default function AssessmentScreen() {
         notes: form.notes.trim(),
       });
       Alert.alert('Saved!', `Assessment for ${form.student} has been recorded.`, [
-        { text: 'OK', onPress: () => form.reset() },
+        { text: 'OK', onPress: () => { form.reset(); setFieldErrors({}); } },
       ]);
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Failed to save assessment.');
@@ -177,26 +189,35 @@ export default function AssessmentScreen() {
         )}
 
         <ScrollView
+          ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           <StudentPicker selected={form.student} onSelect={handleSelectStudent} />
+          {fieldErrors.student ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>⚠ {fieldErrors.student}</Text>
+            </View>
+          ) : null}
 
           {form.student && (
             <>
-              <View style={styles.card}>
+              <View style={[styles.card, fieldErrors.supervisor ? styles.cardError : null]}>
                 <Text style={styles.sectionLabel}>Supervisor Name</Text>
                 <TextInput
                   style={styles.supervisorInput}
                   placeholder="Your full name…"
                   placeholderTextColor={COLORS.textMuted}
                   value={form.supervisor}
-                  onChangeText={form.setSupervisor}
+                  onChangeText={v => { form.setSupervisor(v); setFieldErrors(e => ({ ...e, supervisor: undefined })); }}
                   autoCorrect={false}
                   returnKeyType="done"
                 />
+                {fieldErrors.supervisor ? (
+                  <Text style={styles.errorText}>⚠ {fieldErrors.supervisor}</Text>
+                ) : null}
               </View>
 
               {studentSafetySkills && (
@@ -211,7 +232,11 @@ export default function AssessmentScreen() {
                 goalNumber={1}
                 title={GOAL1_LABEL}
                 groups={[
-                  { options: GOAL1_OPTIONS, selected: form.goal1, onChange: form.setGoal1 },
+                  {
+                    options: GOAL1_OPTIONS,
+                    selected: form.goal1,
+                    onChange: v => { form.setGoal1(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+                  },
                 ]}
               />
 
@@ -223,13 +248,13 @@ export default function AssessmentScreen() {
                     label: 'Effort level',
                     options: GOAL2_PRIMARY_OPTIONS,
                     selected: form.goal2Primary,
-                    onChange: form.setGoal2Primary,
+                    onChange: v => { form.setGoal2Primary(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
                   },
                   {
                     label: 'Arm/leg coordination',
                     options: GOAL2_COORDINATION_OPTIONS,
                     selected: form.goal2Coord,
-                    onChange: form.setGoal2Coord,
+                    onChange: v => { form.setGoal2Coord(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
                   },
                 ]}
               />
@@ -238,9 +263,19 @@ export default function AssessmentScreen() {
                 goalNumber={3}
                 title={GOAL3_LABEL}
                 groups={[
-                  { options: GOAL3_OPTIONS, selected: form.goal3, onChange: form.setGoal3 },
+                  {
+                    options: GOAL3_OPTIONS,
+                    selected: form.goal3,
+                    onChange: v => { form.setGoal3(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+                  },
                 ]}
               />
+
+              {fieldErrors.goals ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorBannerText}>⚠ {fieldErrors.goals}</Text>
+                </View>
+              ) : null}
 
               <VoiceNoteInput
                 value={form.notes}
@@ -406,4 +441,28 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   sessionBannerKidsNext: { color: COLORS.textSub },
+  cardError: {
+    borderColor: '#E53935',
+    borderLeftColor: '#E53935',
+  },
+  errorBanner: {
+    backgroundColor: '#FFF0F0',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E53935',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  errorBannerText: {
+    fontSize: 13,
+    color: '#C62828',
+    fontWeight: '600',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#C62828',
+    fontWeight: '600',
+    marginTop: 8,
+  },
 });
