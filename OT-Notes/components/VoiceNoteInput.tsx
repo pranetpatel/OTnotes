@@ -25,6 +25,13 @@ interface Props {
   };
 }
 
+const RECOGNITION_OPTIONS = {
+  lang: 'en-US',
+  interimResults: true,
+  continuous: false, // iOS doesn't support native continuous mode; we restart manually
+  addsPunctuation: true,
+} as const;
+
 export function VoiceNoteInput({ value, onChange, studentName, goalSelections }: Props) {
   const AUTO_STOP_SILENCE_MS = 8000;
   const [listening, setListening] = useState(false);
@@ -38,6 +45,8 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   const lastTranscriptRef = useRef('');
   const appendedSpeechRef = useRef('');
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the user intends to be recording (so we can restart on iOS session end)
+  const intendedListeningRef = useRef(false);
 
   useEffect(() => {
     valueRef.current = value;
@@ -53,6 +62,7 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   function restartSilenceTimer() {
     clearSilenceTimer();
     silenceTimerRef.current = setTimeout(() => {
+      intendedListeningRef.current = false;
       ExpoSpeechRecognitionModule.stop();
       setListening(false);
     }, AUTO_STOP_SILENCE_MS);
@@ -124,11 +134,30 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   });
 
   useSpeechRecognitionEvent('end', () => {
+    // If the user is still meant to be recording, restart the session.
+    // This simulates continuous mode on iOS which doesn't support it natively.
+    if (intendedListeningRef.current) {
+      ExpoSpeechRecognitionModule.start(RECOGNITION_OPTIONS);
+      return;
+    }
     setListening(false);
     clearSilenceTimer();
   });
 
   useSpeechRecognitionEvent('error', (event) => {
+    // KATAssistantErrorDomain 1107 = iOS speech server session reset.
+    // Restart transparently instead of surfacing it as a fatal error.
+    const isRecoverableIosError =
+      event.message?.includes('1107') || event.error === 'no-speech';
+    if (intendedListeningRef.current && isRecoverableIosError) {
+      setTimeout(() => {
+        if (intendedListeningRef.current) {
+          ExpoSpeechRecognitionModule.start(RECOGNITION_OPTIONS);
+        }
+      }, 300);
+      return;
+    }
+    intendedListeningRef.current = false;
     setListening(false);
     setError(event.message || 'Speech recognition failed.');
     clearSilenceTimer();
@@ -184,6 +213,7 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   async function toggleListen() {
     setError('');
     if (listening) {
+      intendedListeningRef.current = false;
       clearSilenceTimer();
       ExpoSpeechRecognitionModule.stop();
       return;
@@ -209,13 +239,10 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
 
       setVoiceAvailable(true);
       baseTextRef.current = value;
-      ExpoSpeechRecognitionModule.start({
-        lang: 'en-US',
-        interimResults: true,
-        continuous: true,
-        addsPunctuation: true,
-      });
+      intendedListeningRef.current = true;
+      ExpoSpeechRecognitionModule.start(RECOGNITION_OPTIONS);
     } catch (e: any) {
+      intendedListeningRef.current = false;
       setError(e?.message ?? 'Could not start voice capture.');
       setListening(false);
     }
