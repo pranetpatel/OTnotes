@@ -4,7 +4,7 @@ import {
   Modal, TextInput, Alert, FlatList, ActivityIndicator,
   Platform, KeyboardAvoidingView,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { useRole } from '@/context/RoleContext';
 import {
@@ -575,6 +575,7 @@ function SettingsSection() {
 // --- Main Admin Screen ---
 export default function AdminScreen() {
   const { isAdmin, setRole } = useRole();
+  const router = useRouter();
   const [showPinModal, setShowPinModal] = useState(!isAdmin);
   const [goalEditorStudent, setGoalEditorStudent] = useState<string | null>(null);
   const [progressStudent, setProgressStudent] = useState<string | null>(null);
@@ -611,7 +612,7 @@ export default function AdminScreen() {
         <PinModal
           visible={showPinModal}
           onSuccess={handlePinSuccess}
-          onCancel={() => {}}
+          onCancel={() => router.push('/')}
         />
         {!showPinModal && (
           <View style={styles.center}>

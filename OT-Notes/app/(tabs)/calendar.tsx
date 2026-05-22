@@ -11,7 +11,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { useRole } from '@/context/RoleContext';
 import {
@@ -215,6 +215,7 @@ function SlotCard({
   allMakeups, allRecurring,
   onAddMakeup, onAddRecurring, onRemoveMakeup, onRemoveRecurring,
 }: SlotCardProps) {
+  const router = useRouter();
   const isoDate = toISODate(date);
   const dayOfWeek = date.getDay();
 
@@ -241,23 +242,29 @@ function SlotCard({
       ) : (
         <View style={sStyles.studentChips}>
           {students.map(name => (
-            <View key={name} style={[sStyles.chip, isMakeup(name) && sStyles.chipMakeup]}>
+            <TouchableOpacity
+              key={name}
+              style={[sStyles.chip, isMakeup(name) && sStyles.chipMakeup]}
+              onPress={() => router.push({ pathname: '/', params: { student: name } })}
+              activeOpacity={0.7}
+            >
               <Text style={sStyles.chipText}>{name}</Text>
               {isMakeup(name) && <Text style={sStyles.makeupTag}> makeup</Text>}
               {isAdmin && (
                 <TouchableOpacity
-                  onPress={() =>
+                  onPress={e => {
+                    e.stopPropagation?.();
                     isMakeup(name)
                       ? onRemoveMakeup(name, slot, date)
-                      : onRemoveRecurring(name, slot)
-                  }
+                      : onRemoveRecurring(name, slot);
+                  }}
                   style={sStyles.chipRemove}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Text style={sStyles.chipRemoveText}>×</Text>
                 </TouchableOpacity>
               )}
-            </View>
+            </TouchableOpacity>
           ))}
         </View>
       )}

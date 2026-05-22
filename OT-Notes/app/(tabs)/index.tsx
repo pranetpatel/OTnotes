@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { StudentPicker } from '@/components/StudentPicker';
 import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { saveAssessment } from '@/services/database';
-import { getCurrentSlot, getNextSlot, formatMinutes, toISODate } from '@/constants/schedule';
+import { getCurrentSlot, getNextSlot, formatMinutes, toISODate, addDays } from '@/constants/schedule';
 import { getStudentsForSlot } from '@/services/scheduleStorage';
 import {
   COLORS,
@@ -73,19 +73,29 @@ interface FieldErrors {
 
 export default function AssessmentScreen() {
   const form = useForm();
+  const params = useLocalSearchParams<{ student?: string }>();
   const [submitting, setSubmitting] = useState(false);
   const [activeStudents, setActiveStudents] = useState<string[]>([]);
   const [nextStudents, setNextStudents] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [reportDate, setReportDate] = useState(() => new Date());
   const scrollRef = useRef<ScrollView>(null);
 
   const studentSafetySkills = form.student ? (STUDENT_GOALS[form.student]?.safetySkills ?? null) : null;
+  const isReportDateToday = toISODate(reportDate) === toISODate(new Date());
 
   function handleSelectStudent(name: string) {
     form.setStudent(name);
     form.setSafetySkills([]);
     setFieldErrors(e => ({ ...e, student: undefined }));
   }
+
+  useEffect(() => {
+    if (params.student) {
+      handleSelectStudent(String(params.student));
+      setReportDate(new Date());
+    }
+  }, [params.student]);
 
   useFocusEffect(useCallback(() => {
     const n = new Date();
@@ -130,7 +140,7 @@ export default function AssessmentScreen() {
       await saveAssessment({
         student_name: form.student!,
         supervisor_name: form.supervisor.trim(),
-        timestamp: new Date().toISOString(),
+        timestamp: reportDate.toISOString(),
         goal1_selections: form.goal1,
         goal2_primary_selections: form.goal2Primary,
         goal2_coordination_selections: form.goal2Coord,
@@ -139,7 +149,7 @@ export default function AssessmentScreen() {
         notes: form.notes.trim(),
       });
       Alert.alert('Saved!', `Assessment for ${form.student} has been recorded.`, [
-        { text: 'OK', onPress: () => { form.reset(); setFieldErrors({}); } },
+        { text: 'OK', onPress: () => { form.reset(); setFieldErrors({}); setReportDate(new Date()); } },
       ]);
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'Failed to save assessment.');
@@ -172,9 +182,18 @@ export default function AssessmentScreen() {
         {activeSlot && activeStudents.length > 0 && (
           <View style={styles.sessionBanner}>
             <Text style={styles.sessionBannerLabel}>NOW · {activeSlot.label}</Text>
-            <Text style={styles.sessionBannerKids} numberOfLines={1}>
-              {activeStudents.join('  ·  ')}
-            </Text>
+            <View style={styles.sessionBannerKidRow}>
+              {activeStudents.map((name, i) => (
+                <React.Fragment key={name}>
+                  <TouchableOpacity onPress={() => handleSelectStudent(name)} activeOpacity={0.65}>
+                    <Text style={[styles.sessionBannerKids, styles.sessionBannerKidBtn]}>{name}</Text>
+                  </TouchableOpacity>
+                  {i < activeStudents.length - 1 && (
+                    <Text style={styles.sessionBannerKids}>  ·  </Text>
+                  )}
+                </React.Fragment>
+              ))}
+            </View>
           </View>
         )}
         {!activeSlot && nextSlotInfo && nextStudents.length > 0 && (
@@ -182,9 +201,18 @@ export default function AssessmentScreen() {
             <Text style={[styles.sessionBannerLabel, styles.sessionBannerLabelNext]}>
               IN {formatMinutes(nextSlotInfo.minutesUntil)} · {nextSlotInfo.slot.label}
             </Text>
-            <Text style={[styles.sessionBannerKids, styles.sessionBannerKidsNext]} numberOfLines={1}>
-              {nextStudents.join('  ·  ')}
-            </Text>
+            <View style={styles.sessionBannerKidRow}>
+              {nextStudents.map((name, i) => (
+                <React.Fragment key={name}>
+                  <TouchableOpacity onPress={() => handleSelectStudent(name)} activeOpacity={0.65}>
+                    <Text style={[styles.sessionBannerKids, styles.sessionBannerKidsNext, styles.sessionBannerKidBtn]}>{name}</Text>
+                  </TouchableOpacity>
+                  {i < nextStudents.length - 1 && (
+                    <Text style={[styles.sessionBannerKids, styles.sessionBannerKidsNext]}>  ·  </Text>
+                  )}
+                </React.Fragment>
+              ))}
+            </View>
           </View>
         )}
 
@@ -195,6 +223,25 @@ export default function AssessmentScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Session Date */}
+          <View style={styles.dateSection}>
+            <Text style={styles.dateSectionLabel}>SESSION DATE</Text>
+            <View style={styles.dateRow}>
+              <TouchableOpacity style={styles.dateArrowBtn} onPress={() => setReportDate(d => addDays(d, -1))} activeOpacity={0.7}>
+                <Text style={styles.dateArrow}>‹</Text>
+              </TouchableOpacity>
+              <View style={styles.dateCenterDisplay}>
+                {isReportDateToday && <Text style={styles.dateTodayBadge}>TODAY</Text>}
+                <Text style={styles.dateLabelText}>
+                  {reportDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.dateArrowBtn} onPress={() => setReportDate(d => addDays(d, 1))} activeOpacity={0.7}>
+                <Text style={styles.dateArrow}>›</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <StudentPicker selected={form.student} onSelect={handleSelectStudent} />
           {fieldErrors.student ? (
             <View style={styles.errorBanner}>
@@ -301,7 +348,7 @@ export default function AssessmentScreen() {
                     'Are you sure? All selections for this session will be lost.',
                     [
                       { text: 'Cancel', style: 'cancel' },
-                      { text: 'Clear', style: 'destructive', onPress: form.reset },
+                      { text: 'Clear', style: 'destructive', onPress: () => { form.reset(); setReportDate(new Date()); } },
                     ]
                   )
                 }
@@ -435,12 +482,70 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   sessionBannerLabelNext: { color: COLORS.primary },
+  sessionBannerKidRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
   sessionBannerKids: {
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.text,
   },
+  sessionBannerKidBtn: {
+    textDecorationLine: 'underline',
+  },
   sessionBannerKidsNext: { color: COLORS.textSub },
+  dateSection: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.leftAccent,
+  },
+  dateSectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dateArrowBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  dateArrow: { fontSize: 26, color: COLORS.primary, fontWeight: '300', lineHeight: 30 },
+  dateCenterDisplay: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  dateTodayBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: 1,
+    backgroundColor: COLORS.primaryDim,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  dateLabelText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
   cardError: {
     borderColor: '#E53935',
     borderLeftColor: '#E53935',
