@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
@@ -17,6 +16,7 @@ import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { getAllAssessments, updateAssessment } from '@/services/database';
+import { showAlert } from '@/utils/alert';
 import {
   COLORS,
   GOAL1_LABEL,
@@ -62,7 +62,7 @@ export default function EditAssessmentScreen() {
       .then(all => {
         const found = all.find(a => String(a.id) === String(id));
         if (!found) {
-          Alert.alert('Error', 'Assessment not found.');
+          showAlert('Error', 'Assessment not found.');
           router.back();
           return;
         }
@@ -76,7 +76,7 @@ export default function EditAssessmentScreen() {
         setNotes(found.notes ?? '');
         setOriginalTimestamp(found.timestamp);
       })
-      .catch(e => Alert.alert('Error', e?.message))
+      .catch(e => showAlert('Error', e?.message))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -95,6 +95,8 @@ export default function EditAssessmentScreen() {
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
+      const msg = Object.values(errs).filter(Boolean).join('\n');
+      if (msg) showAlert('Cannot Save', msg);
       return;
     }
     setFieldErrors({});
@@ -111,11 +113,11 @@ export default function EditAssessmentScreen() {
         safety_skill_selections: safetySkills,
         notes: notes.trim(),
       });
-      Alert.alert('Updated!', `Assessment for ${student} has been updated.`, [
+      showAlert('Updated!', `Assessment for ${student} has been updated.`, [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to update assessment.');
+      showAlert('Error', e?.message ?? 'Failed to update assessment.');
     } finally {
       setSubmitting(false);
     }

@@ -5,7 +5,6 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   Platform,
   ActivityIndicator,
 } from 'react-native';
@@ -15,6 +14,7 @@ import { AssessmentCard } from '@/components/AssessmentCard';
 import { getAllAssessments, deleteAssessment, Assessment } from '@/services/database';
 import { exportToCSV } from '@/services/csvExport';
 import { COLORS } from '@/constants/data';
+import { showAlert } from '@/utils/alert';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -26,7 +26,7 @@ export default function HistoryScreen() {
     setLoading(true);
     getAllAssessments()
       .then(data => setAssessments(data))
-      .catch((e: any) => Alert.alert('Error', 'Could not load assessments: ' + e?.message))
+      .catch((e: any) => showAlert('Error', 'Could not load assessments: ' + e?.message))
       .finally(() => setLoading(false));
   }, []);
 
@@ -35,7 +35,7 @@ export default function HistoryScreen() {
   function handleDelete(id: number) {
     deleteAssessment(id)
       .then(() => setAssessments(prev => prev.filter(a => a.id !== id)))
-      .catch((e: any) => Alert.alert('Delete Error', e?.message));
+      .catch((e: any) => showAlert('Delete Error', e?.message));
   }
 
   function handleEdit(id: number) {
@@ -44,14 +44,14 @@ export default function HistoryScreen() {
 
   async function handleExport() {
     if (assessments.length === 0) {
-      Alert.alert('Nothing to Export', 'Record some assessments first.');
+      showAlert('Nothing to Export', 'Record some assessments first.');
       return;
     }
     setExporting(true);
     try {
       await exportToCSV(assessments);
     } catch (e: any) {
-      Alert.alert('Export Failed', e?.message ?? 'Could not export CSV.');
+      showAlert('Export Failed', e?.message ?? 'Could not export CSV.');
     } finally {
       setExporting(false);
     }

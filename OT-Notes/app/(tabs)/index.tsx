@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -17,6 +16,7 @@ import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { saveAssessment } from '@/services/database';
+import { showAlert } from '@/utils/alert';
 import { getCurrentSlot, getNextSlot, formatMinutes, toISODate, addDays } from '@/constants/schedule';
 import { getStudentsForSlot } from '@/services/scheduleStorage';
 import {
@@ -133,6 +133,8 @@ export default function AssessmentScreen() {
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
+      const msg = Object.values(errs).filter(Boolean).join('\n');
+      if (msg) showAlert('Cannot Save', msg);
       return;
     }
     setFieldErrors({});
@@ -154,7 +156,7 @@ export default function AssessmentScreen() {
       setFieldErrors({});
       setReportDate(new Date());
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'Failed to save assessment.');
+      showAlert('Error', e?.message ?? 'Failed to save assessment.');
     } finally {
       setSubmitting(false);
     }
@@ -371,7 +373,7 @@ export default function AssessmentScreen() {
               <TouchableOpacity
                 style={styles.resetBtn}
                 onPress={() =>
-                  Alert.alert(
+                  showAlert(
                     'Clear Form',
                     'Are you sure? All selections for this session will be lost.',
                     [

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Modal, TextInput, Alert, FlatList, ActivityIndicator,
+  Modal, TextInput, FlatList, ActivityIndicator,
   Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -14,6 +14,7 @@ import {
 } from '@/services/scheduleStorage';
 import { getAllAssessments, Assessment } from '@/services/database';
 import { STUDENTS, STUDENT_GOALS, COLORS } from '@/constants/data';
+import { showAlert } from '@/utils/alert';
 import { TIME_SLOTS, DAY_NAMES } from '@/constants/schedule';
 
 // --- Helpers ---
@@ -147,15 +148,18 @@ function StringListEditor({
 
 function GoalEditorModal({ visible, studentName, initialGoal, onClose, onSaved }: GoalEditorProps) {
   const [goal, setGoal] = useState<StudentGoalOverride>(initialGoal);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible) setGoal(initialGoal);
   }, [visible, initialGoal]);
 
   function handleSave() {
+    setSaving(true);
     saveGoalOverride(goal)
       .then(() => { onSaved(); onClose(); })
-      .catch((e: any) => Alert.alert('Save Failed', e?.message));
+      .catch((e: any) => showAlert('Save Failed', e?.message))
+      .finally(() => setSaving(false));
   }
 
   return (
@@ -206,8 +210,8 @@ function GoalEditorModal({ visible, studentName, initialGoal, onClose, onSaved }
               multiline
             />
 
-            <TouchableOpacity style={edStyles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
-              <Text style={edStyles.saveBtnText}>Save Goals</Text>
+            <TouchableOpacity style={[edStyles.saveBtn, saving && edStyles.saveBtnDisabled]} onPress={handleSave} disabled={saving} activeOpacity={0.8}>
+              <Text style={edStyles.saveBtnText}>{saving ? 'Saving…' : 'Save Goals'}</Text>
             </TouchableOpacity>
             <View style={{ height: 40 }} />
           </ScrollView>
@@ -241,11 +245,11 @@ function ProgressModal({ visible, studentName, goalOverride, onClose }: Progress
   async function handleAnalyze() {
     const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
     if (!apiKey) {
-      Alert.alert('Configuration Error', 'EXPO_PUBLIC_OPENAI_API_KEY is not set in the environment.');
+      showAlert('Configuration Error', 'EXPO_PUBLIC_OPENAI_API_KEY is not set in the environment.');
       return;
     }
     if (assessments.length === 0) {
-      Alert.alert('No Data', 'Record some assessments for this student first.');
+      showAlert('No Data', 'Record some assessments for this student first.');
       return;
     }
 
@@ -306,7 +310,7 @@ Keep your response concise and clinically actionable.`;
       const data = await response.json();
       setAiAnalysis(data?.choices?.[0]?.message?.content?.trim() ?? 'No response received.');
     } catch (e: any) {
-      Alert.alert('Analysis Failed', e?.message ?? 'Could not reach the AI service.');
+      showAlert('Analysis Failed', e?.message ?? 'Could not reach the AI service.');
     } finally {
       setAnalyzing(false);
     }
@@ -411,13 +415,13 @@ function ScheduleManagerModal({ visible, studentName, onClose, onChanged }: Sche
         setAddingSlotId(null);
         onChanged();
       })
-      .catch((e: any) => Alert.alert('Error', e?.message));
+      .catch((e: any) => showAlert('Error', e?.message));
   }
 
   function handleRemove(id: string) {
     removeRecurringSchedule(id)
       .then(() => { loadSlots(); onChanged(); })
-      .catch((e: any) => Alert.alert('Error', e?.message));
+      .catch((e: any) => showAlert('Error', e?.message));
   }
 
   const availableSlots = addingDay !== null ? TIME_SLOTS.filter(s => s.days.includes(addingDay)) : [];
@@ -514,14 +518,14 @@ function SettingsSection() {
   const [newPin, setNewPin] = useState('');
 
   function handleSavePin() {
-    if (newPin.length < 4) { Alert.alert('Invalid PIN', 'PIN must be at least 4 digits.'); return; }
+    if (newPin.length < 4) { showAlert('Invalid PIN', 'PIN must be at least 4 digits.'); return; }
     setAdminPin(newPin)
       .then(() => {
         setNewPin('');
         setShowPinChange(false);
-        Alert.alert('PIN Updated', 'Your admin PIN has been changed.');
+        showAlert('PIN Updated', 'Your admin PIN has been changed.');
       })
-      .catch((e: any) => Alert.alert('Error', e?.message));
+      .catch((e: any) => showAlert('Error', e?.message));
   }
 
   return (
@@ -560,7 +564,7 @@ function SettingsSection() {
 
       <TouchableOpacity
         style={settStyles.exitBtn}
-        onPress={() => Alert.alert('Switch to Supervisor Mode', 'Exit admin view?', [
+        onPress={() => showAlert('Switch to Supervisor Mode', 'Exit admin view?', [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Switch', onPress: () => setRole('supervisor') },
         ])}
@@ -796,6 +800,7 @@ const edStyles = StyleSheet.create({
     shadowOpacity: 0.35, shadowRadius: 8, elevation: 4,
   },
   saveBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  saveBtnDisabled: { opacity: 0.55, shadowOpacity: 0 },
 });
 
 const progStyles = StyleSheet.create({

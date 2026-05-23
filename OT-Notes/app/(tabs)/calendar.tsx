@@ -8,7 +8,6 @@ import {
   Modal,
   FlatList,
   TextInput,
-  Alert,
   Platform,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -29,6 +28,7 @@ import {
   getRecurringSchedules, addRecurringSchedule, removeRecurringSchedule, RecurringSchedule,
 } from '@/services/scheduleStorage';
 import { STUDENTS, COLORS } from '@/constants/data';
+import { showAlert } from '@/utils/alert';
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
@@ -64,7 +64,7 @@ function AddMakeupModal({ visible, date, slot, onClose, onAdded }: AddMakeupModa
       setNote('');
       onAdded();
       onClose();
-    }).catch((e: any) => Alert.alert('Error', e?.message));
+    }).catch((e: any) => showAlert('Error', e?.message));
   }
 
   return (
@@ -144,7 +144,7 @@ function AddRecurringModal({ visible, slot, dayOfWeek, onClose, onAdded }: AddRe
         onAdded();
         onClose();
       })
-      .catch((e: any) => Alert.alert('Error', e?.message));
+      .catch((e: any) => showAlert('Error', e?.message));
   }
 
   return (
@@ -323,7 +323,7 @@ export default function CalendarScreen() {
   });
 
   function handleRemoveMakeup(studentName: string, slot: TimeSlot, d: Date) {
-    Alert.alert(
+    showAlert(
       'Remove Makeup',
       `Remove ${studentName} from this makeup session?`,
       [
@@ -336,7 +336,7 @@ export default function CalendarScreen() {
             );
             Promise.all(toRemove.map(m => removeMakeupSession(m.id)))
               .then(loadData)
-              .catch((e: any) => Alert.alert('Error', e?.message));
+              .catch((e: any) => showAlert('Error', e?.message));
           },
         },
       ]
@@ -344,7 +344,7 @@ export default function CalendarScreen() {
   }
 
   function handleRemoveRecurring(studentName: string, slot: TimeSlot) {
-    Alert.alert(
+    showAlert(
       'Remove from Weekly Schedule',
       `Remove ${studentName} from all ${DAY_NAMES[date.getDay()]} ${slot.label} sessions?`,
       [
@@ -357,7 +357,7 @@ export default function CalendarScreen() {
             );
             Promise.all(toRemove.map(r => removeRecurringSchedule(r.id)))
               .then(loadData)
-              .catch((e: any) => Alert.alert('Error', e?.message));
+              .catch((e: any) => showAlert('Error', e?.message));
           },
         },
       ]
