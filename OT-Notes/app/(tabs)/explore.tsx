@@ -1,12 +1,12 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Platform,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -16,11 +16,22 @@ import { exportToCSV } from '@/services/csvExport';
 import { COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 
+type SortKey = 'date' | 'name' | 'time';
+type SortDir = 'asc' | 'desc';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  date: 'Date',
+  name: 'Name',
+  time: 'Time of Day',
+};
+
 export default function HistoryScreen() {
   const router = useRouter();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('date');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -31,6 +42,31 @@ export default function HistoryScreen() {
   }, []);
 
   useFocusEffect(loadData);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'date' ? 'desc' : 'asc');
+    }
+  }
+
+  const sortedAssessments = useMemo(() => {
+    return [...assessments].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'date') {
+        cmp = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+      } else if (sortKey === 'name') {
+        cmp = a.student_name.localeCompare(b.student_name);
+      } else if (sortKey === 'time') {
+        const ta = new Date(a.timestamp);
+        const tb = new Date(b.timestamp);
+        cmp = (ta.getHours() * 60 + ta.getMinutes()) - (tb.getHours() * 60 + tb.getMinutes());
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [assessments, sortKey, sortDir]);
 
   function handleDelete(id: number) {
     deleteAssessment(id)
@@ -43,13 +79,13 @@ export default function HistoryScreen() {
   }
 
   async function handleExport() {
-    if (assessments.length === 0) {
+    if (sortedAssessments.length === 0) {
       showAlert('Nothing to Export', 'Record some assessments first.');
       return;
     }
     setExporting(true);
     try {
-      await exportToCSV(assessments);
+      await exportToCSV(sortedAssessments);
     } catch (e: any) {
       showAlert('Export Failed', e?.message ?? 'Could not export CSV.');
     } finally {
@@ -77,6 +113,32 @@ export default function HistoryScreen() {
     ? 'No sessions recorded yet'
     : `${assessments.length} session${assessments.length !== 1 ? 's' : ''} on record`;
 
+  const sortBar = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.sortBarScroll}
+      contentContainerStyle={styles.sortBarContent}
+    >
+      {(['date', 'name', 'time'] as SortKey[]).map(key => {
+        const active = sortKey === key;
+        const arrow = active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : '';
+        return (
+          <TouchableOpacity
+            key={key}
+            style={[styles.sortPill, active && styles.sortPillActive]}
+            onPress={() => toggleSort(key)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.sortPillText, active && styles.sortPillTextActive]}>
+              {SORT_LABELS[key]}{arrow}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
+  );
+
   return (
     <View style={styles.container}>
       <ScreenHeader subtitle={countText} right={exportButton} />
@@ -96,7 +158,7 @@ export default function HistoryScreen() {
         </View>
       ) : (
         <FlatList
-          data={assessments}
+          data={sortedAssessments}
           keyExtractor={item => String(item.id)}
           renderItem={({ item }) => (
             <AssessmentCard assessment={item} onDelete={handleDelete} onEdit={handleEdit} />
@@ -104,8 +166,11 @@ export default function HistoryScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
-            <View style={styles.listHeader}>
-              <Text style={styles.listHeaderText}>Tap a record to expand details</Text>
+            <View>
+              {sortBar}
+              <Text style={styles.listHeaderText}>
+                Sorted by {SORT_LABELS[sortKey]} · {sortDir === 'desc' ? (sortKey === 'name' ? 'Z→A' : 'newest/latest first') : (sortKey === 'name' ? 'A→Z' : 'oldest/earliest first')} · tap to toggle
+              </Text>
             </View>
           }
         />
@@ -147,18 +212,45 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
+  sortBarScroll: {
+    flexGrow: 0,
+    marginBottom: 8,
+  },
+  sortBarContent: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  sortPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  sortPillActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  sortPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textSub,
+  },
+  sortPillTextActive: {
+    color: '#fff',
+  },
   listContent: {
     padding: 16,
     paddingBottom: 48,
   },
-  listHeader: {
-    marginBottom: 10,
-  },
   listHeaderText: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textMuted,
     textAlign: 'center',
     letterSpacing: 0.2,
+    marginBottom: 10,
   },
   center: {
     flex: 1,

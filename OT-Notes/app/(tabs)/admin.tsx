@@ -12,7 +12,7 @@ import {
   verifyAdminPin, setAdminPin,
   getStudentRecurringSlots, addRecurringSchedule, removeRecurringSchedule,
 } from '@/services/scheduleStorage';
-import { getAllAssessments, Assessment } from '@/services/database';
+import { getAllAssessments, Assessment, seedDummyData } from '@/services/database';
 import { STUDENTS, STUDENT_GOALS, COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 import { TIME_SLOTS, DAY_NAMES } from '@/constants/schedule';
@@ -516,6 +516,27 @@ function SettingsSection() {
   const { setRole } = useRole();
   const [showPinChange, setShowPinChange] = useState(false);
   const [newPin, setNewPin] = useState('');
+  const [seeding, setSeeding] = useState(false);
+
+  function handleSeedData() {
+    showAlert(
+      'Seed Demo Data',
+      'This will insert ~50 fake assessment records for all students. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Seed Data',
+          onPress: () => {
+            setSeeding(true);
+            seedDummyData()
+              .then(count => showAlert('Done', `Inserted ${count} demo records. Check the Records tab.`))
+              .catch((e: any) => showAlert('Error', e?.message ?? 'Seed failed.'))
+              .finally(() => setSeeding(false));
+          },
+        },
+      ]
+    );
+  }
 
   function handleSavePin() {
     if (newPin.length < 4) { showAlert('Invalid PIN', 'PIN must be at least 4 digits.'); return; }
@@ -561,6 +582,20 @@ function SettingsSection() {
           </TouchableOpacity>
         )}
       </View>
+
+      <TouchableOpacity
+        style={[settStyles.seedBtn, seeding && settStyles.seedBtnDisabled]}
+        onPress={handleSeedData}
+        disabled={seeding}
+        activeOpacity={0.8}
+      >
+        {seeding ? (
+          <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 6 }} />
+        ) : (
+          <Text style={settStyles.seedIcon}>🗂</Text>
+        )}
+        <Text style={settStyles.seedBtnText}>{seeding ? 'Seeding…' : 'Seed Demo Data'}</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={settStyles.exitBtn}
@@ -903,6 +938,14 @@ const settStyles = StyleSheet.create({
   cancelText: { fontSize: 14, fontWeight: '600', color: COLORS.textSub },
   outlineBtn: { borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10, paddingVertical: 11, alignItems: 'center' },
   outlineBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.textSub },
+  seedBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: COLORS.primaryDim, borderRadius: 14, paddingVertical: 15, marginBottom: 10, gap: 6,
+    borderWidth: 1.5, borderColor: COLORS.border,
+  },
+  seedBtnDisabled: { opacity: 0.5 },
+  seedIcon: { fontSize: 16 },
+  seedBtnText: { fontSize: 15, fontWeight: '700', color: COLORS.primary },
   exitBtn: {
     backgroundColor: '#FEE2E2', borderRadius: 14, paddingVertical: 15, alignItems: 'center', marginTop: 4,
   },
