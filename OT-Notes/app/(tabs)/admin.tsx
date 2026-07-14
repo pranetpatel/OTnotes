@@ -13,7 +13,8 @@ import {
   getStudentRecurringSlots, addRecurringSchedule, removeRecurringSchedule,
 } from '@/services/scheduleStorage';
 import { getAllAssessments, Assessment, seedDummyData } from '@/services/database';
-import { STUDENTS, STUDENT_GOALS, COLORS } from '@/constants/data';
+import { getAllStudents, addStudent, updateStudent, Student } from '@/services/students';
+import { STUDENT_GOALS, COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 import { TIME_SLOTS, DAY_NAMES } from '@/constants/schedule';
 
@@ -511,6 +512,131 @@ function ScheduleManagerModal({ visible, studentName, onClose, onChanged }: Sche
   );
 }
 
+// --- Add Student Modal ---
+interface AddStudentModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onAdded: () => void;
+}
+
+function AddStudentModal({ visible, onClose, onAdded }: AddStudentModalProps) {
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    addStudent(trimmed)
+      .then(() => { setName(''); onAdded(); onClose(); })
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to add student.'))
+      .finally(() => setSaving(false));
+  }
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={pinStyles.overlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={pinStyles.card}>
+            <Text style={pinStyles.lockIcon}>🧒</Text>
+            <Text style={pinStyles.title}>Add Student</Text>
+            <TextInput
+              style={edStyles.textInput}
+              value={name}
+              onChangeText={setName}
+              placeholder="Full name…"
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+            />
+            <View style={pinStyles.btnRow}>
+              <TouchableOpacity style={pinStyles.cancelBtn} onPress={() => { setName(''); onClose(); }}>
+                <Text style={pinStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[pinStyles.submitBtn, (!name.trim() || saving) && pinStyles.submitBtnDisabled]}
+                onPress={handleSave}
+                disabled={!name.trim() || saving}
+              >
+                <Text style={pinStyles.submitText}>{saving ? 'Saving…' : 'Add'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+// --- Edit Student Modal (rename / active toggle) ---
+interface EditStudentModalProps {
+  visible: boolean;
+  student: Student | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function EditStudentModal({ visible, student, onClose, onSaved }: EditStudentModalProps) {
+  const [name, setName] = useState('');
+  const [active, setActive] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (student) { setName(student.name); setActive(student.active); }
+  }, [student]);
+
+  function handleSave() {
+    if (!student) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    updateStudent(student.id, { name: trimmed, active })
+      .then(() => { onSaved(); onClose(); })
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to update student.'))
+      .finally(() => setSaving(false));
+  }
+
+  if (!student) return null;
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={pinStyles.overlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={pinStyles.card}>
+            <Text style={pinStyles.lockIcon}>✏️</Text>
+            <Text style={pinStyles.title}>Edit Student</Text>
+            <TextInput
+              style={edStyles.textInput}
+              value={name}
+              onChangeText={setName}
+              placeholder="Full name…"
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
+              onPress={() => setActive(a => !a)}
+            >
+              <Text style={settStyles.outlineBtnText}>{active ? 'Active — tap to deactivate' : 'Inactive — tap to reactivate'}</Text>
+            </TouchableOpacity>
+            <View style={pinStyles.btnRow}>
+              <TouchableOpacity style={pinStyles.cancelBtn} onPress={onClose}>
+                <Text style={pinStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[pinStyles.submitBtn, (!name.trim() || saving) && pinStyles.submitBtnDisabled]}
+                onPress={handleSave}
+                disabled={!name.trim() || saving}
+              >
+                <Text style={pinStyles.submitText}>{saving ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
 // --- Settings Section ---
 function SettingsSection() {
   const { setRole } = useRole();
@@ -621,19 +747,30 @@ export default function AdminScreen() {
   const [scheduleStudent, setScheduleStudent] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [overrides, setOverrides] = useState<Record<string, StudentGoalOverride | null>>({});
+  const [students, setStudents] = useState<Student[]>([]);
+  const [showAddStudent, setShowAddStudent] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+
+  const loadStudents = useCallback(() => {
+    getAllStudents().then(setStudents).catch(() => {});
+  }, []);
 
   const loadOverrides = useCallback(() => {
     getAllGoalOverrides().then(list => {
       const map: Record<string, StudentGoalOverride | null> = {};
-      STUDENTS.forEach(n => { map[n] = null; });
+      students.forEach(s => { map[s.name] = null; });
       list.forEach(o => { map[o.studentName] = o; });
       setOverrides(map);
     }).catch(() => {});
-  }, []);
+  }, [students]);
 
   useFocusEffect(useCallback(() => {
-    loadOverrides();
-  }, [tick, loadOverrides]));
+    loadStudents();
+  }, [tick, loadStudents]));
+
+  useFocusEffect(useCallback(() => {
+    if (students.length > 0) loadOverrides();
+  }, [tick, students, loadOverrides]));
 
   function handlePinSuccess() {
     setRole('admin');
@@ -671,20 +808,32 @@ export default function AdminScreen() {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
         {/* Student Management */}
-        <Text style={styles.sectionTitle}>Students</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Students</Text>
+          <TouchableOpacity style={styles.addStudentBtn} onPress={() => setShowAddStudent(true)} activeOpacity={0.8}>
+            <Text style={styles.addStudentBtnText}>+ Add Student</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.sectionHint}>Tap a student to edit goals, view progress, or manage schedule.</Text>
 
-        {STUDENTS.map(name => {
+        {students.map(student => {
+          const name = student.name;
           const override = overrides[name];
           const goal = getEffectiveGoalSync(name, override);
           return (
-            <View key={name} style={styles.studentCard}>
+            <View key={student.id} style={[styles.studentCard, !student.active && styles.studentCardInactive]}>
               <View style={styles.studentCardTop}>
                 <View style={styles.studentInfo}>
                   <Text style={styles.studentName}>{name}</Text>
                   <Text style={styles.studentFocus}>{goal.focus || 'No focus set'}</Text>
-                  {Boolean(override) && <View style={styles.editedBadge}><Text style={styles.editedText}>Edited</Text></View>}
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {Boolean(override) && <View style={styles.editedBadge}><Text style={styles.editedText}>Edited</Text></View>}
+                    {!student.active && <View style={styles.inactiveBadge}><Text style={styles.inactiveText}>Inactive</Text></View>}
+                  </View>
                 </View>
+                <TouchableOpacity onPress={() => setEditingStudent(student)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.editIcon}>⚙️</Text>
+                </TouchableOpacity>
               </View>
               <View style={styles.studentActions}>
                 <TouchableOpacity
@@ -742,6 +891,17 @@ export default function AdminScreen() {
           onChanged={() => setTick(t => t + 1)}
         />
       )}
+      <AddStudentModal
+        visible={showAddStudent}
+        onClose={() => setShowAddStudent(false)}
+        onAdded={() => setTick(t => t + 1)}
+      />
+      <EditStudentModal
+        visible={!!editingStudent}
+        student={editingStudent}
+        onClose={() => setEditingStudent(null)}
+        onSaved={() => setTick(t => t + 1)}
+      />
     </View>
   );
 }
@@ -757,18 +917,25 @@ const styles = StyleSheet.create({
   unlockIcon: { fontSize: 52 },
   unlockText: { fontSize: 17, fontWeight: '700', color: COLORS.textSub },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: COLORS.text, marginBottom: 4, marginTop: 8 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  addStudentBtn: { backgroundColor: COLORS.primaryDim, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: COLORS.primary },
+  addStudentBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.primaryLight },
   sectionHint: { fontSize: 12, color: COLORS.textMuted, marginBottom: 14 },
   studentCard: {
     backgroundColor: COLORS.surface, borderRadius: 16, padding: 14,
     marginBottom: 10, borderWidth: 1, borderColor: COLORS.cardBorder,
     borderLeftWidth: 4, borderLeftColor: COLORS.leftAccent,
   },
+  studentCardInactive: { opacity: 0.55 },
   studentCardTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   studentInfo: { flex: 1, gap: 2 },
   studentName: { fontSize: 16, fontWeight: '700', color: COLORS.text },
   studentFocus: { fontSize: 12, color: COLORS.textSub, fontWeight: '500' },
   editedBadge: { marginTop: 4, alignSelf: 'flex-start', backgroundColor: COLORS.accentDim, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   editedText: { fontSize: 10, fontWeight: '700', color: COLORS.accent, letterSpacing: 0.5 },
+  inactiveBadge: { marginTop: 4, alignSelf: 'flex-start', backgroundColor: '#FEE2E2', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
+  inactiveText: { fontSize: 10, fontWeight: '700', color: COLORS.danger, letterSpacing: 0.5 },
+  editIcon: { fontSize: 18, padding: 4 },
   studentActions: { flexDirection: 'row', gap: 8 },
   actionBtn: {
     flex: 1, borderWidth: 1.5, borderColor: COLORS.border, borderRadius: 10,

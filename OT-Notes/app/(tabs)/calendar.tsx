@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -27,7 +27,8 @@ import {
   getMakeupSessions, addMakeupSession, removeMakeupSession, MakeupSession,
   getRecurringSchedules, addRecurringSchedule, removeRecurringSchedule, RecurringSchedule,
 } from '@/services/scheduleStorage';
-import { STUDENTS, COLORS } from '@/constants/data';
+import { getActiveStudents } from '@/services/students';
+import { COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 
 function formatDate(d: Date): string {
@@ -51,6 +52,11 @@ interface AddMakeupModalProps {
 function AddMakeupModal({ visible, date, slot, onClose, onAdded }: AddMakeupModalProps) {
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [note, setNote] = useState('');
+  const [students, setStudents] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (visible) getActiveStudents().then(list => setStudents(list.map(s => s.name))).catch(() => {});
+  }, [visible]);
 
   function handleAdd() {
     if (!selectedStudent || !slot) return;
@@ -85,7 +91,7 @@ function AddMakeupModal({ visible, date, slot, onClose, onAdded }: AddMakeupModa
 
         <Text style={mStyles.sectionLabel}>Select Student</Text>
         <FlatList
-          data={STUDENTS}
+          data={students}
           keyExtractor={s => s}
           style={mStyles.studentList}
           renderItem={({ item }) => (
@@ -135,6 +141,11 @@ interface AddRecurringModalProps {
 
 function AddRecurringModal({ visible, slot, dayOfWeek, onClose, onAdded }: AddRecurringModalProps) {
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
+  const [students, setStudents] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (visible) getActiveStudents().then(list => setStudents(list.map(s => s.name))).catch(() => {});
+  }, [visible]);
 
   function handleAdd() {
     if (!selectedStudent || !slot) return;
@@ -165,7 +176,7 @@ function AddRecurringModal({ visible, slot, dayOfWeek, onClose, onAdded }: AddRe
 
         <Text style={mStyles.sectionLabel}>Select Student</Text>
         <FlatList
-          data={STUDENTS}
+          data={students}
           keyExtractor={s => s}
           style={mStyles.studentList}
           renderItem={({ item }) => (

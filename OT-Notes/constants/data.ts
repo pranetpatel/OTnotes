@@ -1,21 +1,3 @@
-export const STUDENTS = [
-  'Alex Johnson',
-  'Maya Patel',
-  'Liam Rodriguez',
-  'Emma Chen',
-  'Noah Williams',
-  'Sophia Davis',
-  'Oliver Martinez',
-  'Ava Thompson',
-  'Elijah Garcia',
-  'Isabella Lee',
-  'Lucas Wilson',
-  'Mia Anderson',
-  'Mason Taylor',
-  'Charlotte Brown',
-  'Aiden Moore',
-];
-
 export const GOAL1_LABEL = 'GOAL 1 — Core Stability & Postural Control';
 export const GOAL1_OPTIONS = ['Minimal', 'Emerging', 'Improving', 'Strong'];
 

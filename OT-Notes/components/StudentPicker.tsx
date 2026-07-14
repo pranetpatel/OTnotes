@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -10,8 +10,9 @@ import {
   SafeAreaView,
   Image,
 } from 'react-native';
-import { COLORS, STUDENTS } from '@/constants/data';
+import { COLORS } from '@/constants/data';
 import { GoalSheetModal } from '@/components/GoalSheetModal';
+import { getActiveStudents } from '@/services/students';
 
 interface Props {
   selected: string | null;
@@ -31,8 +32,15 @@ export function StudentPicker({ selected, onSelect }: Props) {
   const [visible, setVisible] = useState(false);
   const [goalSheetVisible, setGoalSheetVisible] = useState(false);
   const [query, setQuery] = useState('');
+  const [students, setStudents] = useState<string[]>([]);
 
-  const filtered = STUDENTS.filter(s =>
+  useEffect(() => {
+    if (visible) {
+      getActiveStudents().then(list => setStudents(list.map(s => s.name))).catch(() => {});
+    }
+  }, [visible]);
+
+  const filtered = students.filter(s =>
     s.toLowerCase().includes(query.toLowerCase())
   );
 

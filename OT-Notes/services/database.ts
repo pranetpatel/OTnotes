@@ -1,9 +1,12 @@
 import { supabase } from './supabase';
+import { findStudentByName } from './students';
 
 export interface Assessment {
   id?: number;
   student_name: string;
+  student_id?: number | null;
   supervisor_name: string;
+  staff_id?: number | null;
   timestamp: string;
   goal1_selections: string[];
   goal2_primary_selections: string[];
@@ -11,12 +14,17 @@ export interface Assessment {
   goal3_selections: string[];
   safety_skill_selections: string[];
   notes: string;
+  status?: 'draft' | 'reviewed';
+  reviewed_by?: number | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
 }
 
 export function initDatabase(): void {}
 
 export async function saveAssessment(assessment: Omit<Assessment, 'id'>): Promise<void> {
-  const { error } = await supabase.from('assessments').insert([assessment]);
+  const student_id = assessment.student_id ?? (await findStudentByName(assessment.student_name))?.id ?? null;
+  const { error } = await supabase.from('assessments').insert([{ ...assessment, student_id }]);
   if (error) throw new Error(error.message);
 }
 
@@ -30,7 +38,8 @@ export async function getAllAssessments(): Promise<Assessment[]> {
 }
 
 export async function updateAssessment(id: number, assessment: Omit<Assessment, 'id'>): Promise<void> {
-  const { error } = await supabase.from('assessments').update(assessment).eq('id', id);
+  const student_id = assessment.student_id ?? (await findStudentByName(assessment.student_name))?.id ?? null;
+  const { error } = await supabase.from('assessments').update({ ...assessment, student_id }).eq('id', id);
   if (error) throw new Error(error.message);
 }
 
