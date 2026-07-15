@@ -12,10 +12,13 @@ import {
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { StudentPicker } from '@/components/StudentPicker';
+import { StaffIdentityPicker } from '@/components/StaffIdentityPicker';
 import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { saveAssessment } from '@/services/database';
+import { StaffMember } from '@/services/staff';
+import { useStaffSession } from '@/context/StaffSessionContext';
 import { showAlert } from '@/utils/alert';
 import { getCurrentSlot, getNextSlot, formatMinutes, toISODate, addDays } from '@/constants/schedule';
 import { getStudentsForSlot } from '@/services/scheduleStorage';
@@ -33,7 +36,6 @@ import {
 
 function useForm() {
   const [student, setStudent] = useState<string | null>(null);
-  const [supervisor, setSupervisor] = useState('');
   const [goal1, setGoal1] = useState<string[]>([]);
   const [goal2Primary, setGoal2Primary] = useState<string[]>([]);
   const [goal2Coord, setGoal2Coord] = useState<string[]>([]);
@@ -43,7 +45,6 @@ function useForm() {
 
   function reset() {
     setStudent(null);
-    setSupervisor('');
     setGoal1([]);
     setGoal2Primary([]);
     setGoal2Coord([]);
@@ -54,7 +55,6 @@ function useForm() {
 
   return {
     student, setStudent,
-    supervisor, setSupervisor,
     goal1, setGoal1,
     goal2Primary, setGoal2Primary,
     goal2Coord, setGoal2Coord,
@@ -73,6 +73,7 @@ interface FieldErrors {
 
 export default function AssessmentScreen() {
   const form = useForm();
+  const { activeStaff, setActiveStaff } = useStaffSession();
   const params = useLocalSearchParams<{ student?: string }>();
   const [submitting, setSubmitting] = useState(false);
   const [savedStudent, setSavedStudent] = useState<string | null>(null);
@@ -118,7 +119,7 @@ export default function AssessmentScreen() {
   function buildErrors(): FieldErrors {
     const errs: FieldErrors = {};
     if (!form.student) errs.student = 'Student not selected — tap to choose a student.';
-    if (!form.supervisor.trim()) errs.supervisor = 'Supervisor name is required.';
+    if (!activeStaff) errs.supervisor = 'Confirm your staff identity (name + PIN) before saving.';
     const hasAnyGoal =
       form.goal1.length > 0 ||
       form.goal2Primary.length > 0 ||
@@ -142,7 +143,8 @@ export default function AssessmentScreen() {
     try {
       await saveAssessment({
         student_name: form.student!,
-        supervisor_name: form.supervisor.trim(),
+        supervisor_name: activeStaff!.name,
+        staff_id: activeStaff!.id,
         timestamp: reportDate.toISOString(),
         goal1_selections: form.goal1,
         goal2_primary_selections: form.goal2Primary,
@@ -281,21 +283,17 @@ export default function AssessmentScreen() {
 
           {form.student && (
             <>
-              <View style={[styles.card, fieldErrors.supervisor ? styles.cardError : null]}>
-                <Text style={styles.sectionLabel}>Supervisor Name</Text>
-                <TextInput
-                  style={styles.supervisorInput}
-                  placeholder="Your full name…"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={form.supervisor}
-                  onChangeText={v => { form.setSupervisor(v); setFieldErrors(e => ({ ...e, supervisor: undefined })); }}
-                  autoCorrect={false}
-                  returnKeyType="done"
-                />
-                {fieldErrors.supervisor ? (
-                  <Text style={styles.errorText}>⚠ {fieldErrors.supervisor}</Text>
-                ) : null}
-              </View>
+              <StaffIdentityPicker
+                selected={activeStaff}
+                onConfirmed={(s: StaffMember) => { setActiveStaff(s); setFieldErrors(e => ({ ...e, supervisor: undefined })); }}
+                label="Supervisor"
+                placeholder="Confirm your identity"
+              />
+              {fieldErrors.supervisor ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorBannerText}>⚠ {fieldErrors.supervisor}</Text>
+                </View>
+              ) : null}
 
               {studentSafetySkills && (
                 <SafetyGoalSection

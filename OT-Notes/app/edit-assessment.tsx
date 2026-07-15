@@ -12,10 +12,15 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StudentPicker } from '@/components/StudentPicker';
+import { StaffIdentityPicker } from '@/components/StaffIdentityPicker';
 import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
-import { getAllAssessments, updateAssessment } from '@/services/database';
+import { getAllAssessments, updateAssessment, signOffAssessment, revertToDraft, Assessment } from '@/services/database';
+import { StaffMember, getAllStaff } from '@/services/staff';
+import { StaffIdentityPicker as OtSignOffPicker } from '@/components/StaffIdentityPicker';
+import { useRole } from '@/context/RoleContext';
+import { exportAssessmentToPDF } from '@/services/pdfExport';
 import { showAlert } from '@/utils/alert';
 import {
   COLORS,
@@ -45,7 +50,7 @@ export default function EditAssessmentScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const [student, setStudent] = useState<string | null>(null);
-  const [supervisor, setSupervisor] = useState('');
+  const [supervisorStaff, setSupervisorStaff] = useState<StaffMember | null>(null);
   const [goal1, setGoal1] = useState<string[]>([]);
   const [goal2Primary, setGoal2Primary] = useState<string[]>([]);
   const [goal2Coord, setGoal2Coord] = useState<string[]>([]);
@@ -53,13 +58,22 @@ export default function EditAssessmentScreen() {
   const [safetySkills, setSafetySkills] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
   const [originalTimestamp, setOriginalTimestamp] = useState('');
+  const [status, setStatus] = useState<'draft' | 'reviewed'>('draft');
+  const [reviewedByName, setReviewedByName] = useState<string | null>(null);
+  const [reviewedAt, setReviewedAt] = useState<string | null>(null);
+  const [reviewNotesText, setReviewNotesText] = useState<string | null>(null);
+  const [signingOff, setSigningOff] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const [pendingReviewNotes, setPendingReviewNotes] = useState('');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const { isAdmin } = useRole();
 
   const studentSafetySkills = student ? (STUDENT_GOALS[student]?.safetySkills ?? null) : null;
 
   useEffect(() => {
     if (!id) return;
-    getAllAssessments()
-      .then(all => {
+    Promise.all([getAllAssessments(), getAllStaff()])
+      .then(([all, staffList]) => {
         const found = all.find(a => String(a.id) === String(id));
         if (!found) {
           showAlert('Error', 'Assessment not found.');
@@ -67,7 +81,8 @@ export default function EditAssessmentScreen() {
           return;
         }
         setStudent(found.student_name);
-        setSupervisor(found.supervisor_name);
+        const matchedStaff = staffList.find(s => s.name === found.supervisor_name) ?? null;
+        setSupervisorStaff(matchedStaff);
         setGoal1(found.goal1_selections ?? []);
         setGoal2Primary(found.goal2_primary_selections ?? []);
         setGoal2Coord(found.goal2_coordination_selections ?? []);
@@ -75,15 +90,85 @@ export default function EditAssessmentScreen() {
         setSafetySkills(found.safety_skill_selections ?? []);
         setNotes(found.notes ?? '');
         setOriginalTimestamp(found.timestamp);
+        setStatus(found.status === 'reviewed' ? 'reviewed' : 'draft');
+        setReviewNotesText(found.review_notes ?? null);
+        setReviewedAt(found.reviewed_at ?? null);
+        const reviewer = found.reviewed_by ? staffList.find(s => s.id === found.reviewed_by) : null;
+        setReviewedByName(reviewer?.name ?? null);
       })
       .catch(e => showAlert('Error', e?.message))
       .finally(() => setLoading(false));
   }, [id]);
 
+  function handleSignOff(reviewer: StaffMember) {
+    setSigningOff(true);
+    signOffAssessment(Number(id), reviewer.id, pendingReviewNotes)
+      .then(() => {
+        setStatus('reviewed');
+        setReviewedByName(reviewer.name);
+        setReviewedAt(new Date().toISOString());
+        setReviewNotesText(pendingReviewNotes.trim() || null);
+        setPendingReviewNotes('');
+        showAlert('Signed Off', `${reviewer.name} has signed off this note.`);
+      })
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to sign off.'))
+      .finally(() => setSigningOff(false));
+  }
+
+  async function handleExportPdf() {
+    if (!student || !supervisorStaff) {
+      showAlert('Cannot Export', 'Select a student and confirm staff identity first.');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const current: Assessment = {
+        id: Number(id),
+        student_name: student,
+        supervisor_name: supervisorStaff.name,
+        timestamp: originalTimestamp,
+        goal1_selections: goal1,
+        goal2_primary_selections: goal2Primary,
+        goal2_coordination_selections: goal2Coord,
+        goal3_selections: goal3,
+        safety_skill_selections: safetySkills,
+        notes: notes.trim(),
+        status,
+        reviewed_at: reviewedAt,
+        review_notes: reviewNotesText,
+      };
+      await exportAssessmentToPDF(current);
+    } catch (e: any) {
+      showAlert('Export Failed', e?.message ?? 'Could not export PDF.');
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
+  function handleRevertToDraft() {
+    showAlert('Revert to Draft', 'Clear the OT sign-off on this note?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Revert', style: 'destructive', onPress: () => {
+          setReverting(true);
+          revertToDraft(Number(id))
+            .then(() => {
+              setStatus('draft');
+              setReviewedByName(null);
+              setReviewedAt(null);
+              setReviewNotesText(null);
+            })
+            .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to revert.'))
+            .finally(() => setReverting(false));
+        },
+      },
+    ]);
+  }
+
   function buildErrors(): FieldErrors {
     const errs: FieldErrors = {};
     if (!student) errs.student = 'Student not selected — tap to choose a student.';
-    if (!supervisor.trim()) errs.supervisor = 'Supervisor name is required.';
+    if (!supervisorStaff) errs.supervisor = 'Confirm staff identity (name + PIN) before saving.';
     const hasAnyGoal =
       goal1.length > 0 || goal2Primary.length > 0 || goal2Coord.length > 0 || goal3.length > 0;
     if (!hasAnyGoal) errs.goals = 'Select at least one goal indicator before saving.';
@@ -104,7 +189,8 @@ export default function EditAssessmentScreen() {
     try {
       await updateAssessment(Number(id), {
         student_name: student!,
-        supervisor_name: supervisor.trim(),
+        supervisor_name: supervisorStaff!.name,
+        staff_id: supervisorStaff!.id,
         timestamp: originalTimestamp,
         goal1_selections: goal1,
         goal2_primary_selections: goal2Primary,
@@ -160,21 +246,17 @@ export default function EditAssessmentScreen() {
 
         {student && (
           <>
-            <View style={[styles.card, fieldErrors.supervisor ? styles.cardError : null]}>
-              <Text style={styles.sectionLabel}>Supervisor Name</Text>
-              <TextInput
-                style={styles.supervisorInput}
-                placeholder="Your full name…"
-                placeholderTextColor={COLORS.textMuted}
-                value={supervisor}
-                onChangeText={v => { setSupervisor(v); setFieldErrors(e => ({ ...e, supervisor: undefined })); }}
-                autoCorrect={false}
-                returnKeyType="done"
-              />
-              {fieldErrors.supervisor ? (
-                <Text style={styles.errorText}>⚠ {fieldErrors.supervisor}</Text>
-              ) : null}
-            </View>
+            <StaffIdentityPicker
+              selected={supervisorStaff}
+              onConfirmed={(s: StaffMember) => { setSupervisorStaff(s); setFieldErrors(e => ({ ...e, supervisor: undefined })); }}
+              label="Supervisor"
+              placeholder="Confirm your identity"
+            />
+            {fieldErrors.supervisor ? (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>⚠ {fieldErrors.supervisor}</Text>
+              </View>
+            ) : null}
 
             {studentSafetySkills && (
               <SafetyGoalSection
@@ -247,6 +329,17 @@ export default function EditAssessmentScreen() {
           </>
         )}
 
+        {student && (
+          <TouchableOpacity
+            style={[styles.pdfBtn, exportingPdf && styles.updateBtnDisabled]}
+            onPress={handleExportPdf}
+            disabled={exportingPdf}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.pdfBtnText}>{exportingPdf ? 'Exporting…' : '⬇ Export PDF'}</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.actionRow}>
           <TouchableOpacity
             style={styles.cancelBtn}
@@ -263,6 +356,50 @@ export default function EditAssessmentScreen() {
           >
             <Text style={styles.updateText}>{submitting ? 'Saving…' : 'Update Assessment'}</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={[styles.card, status === 'reviewed' && styles.signOffCardReviewed]}>
+          <Text style={styles.sectionLabel}>OT Sign-Off</Text>
+          {status === 'reviewed' ? (
+            <>
+              <Text style={styles.signOffStatusText}>
+                ✓ Reviewed by {reviewedByName ?? 'Unknown'}
+                {reviewedAt ? ` on ${new Date(reviewedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : ''}
+              </Text>
+              {reviewNotesText ? <Text style={styles.signOffNotesText}>{reviewNotesText}</Text> : null}
+              {isAdmin && (
+                <TouchableOpacity
+                  style={[styles.revertBtn, reverting && styles.updateBtnDisabled]}
+                  onPress={handleRevertToDraft}
+                  disabled={reverting}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.revertBtnText}>{reverting ? 'Reverting…' : 'Revert to Draft'}</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <>
+              <Text style={styles.signOffHint}>
+                This note is still a draft. An OT must confirm their identity to sign off.
+              </Text>
+              <TextInput
+                style={[styles.supervisorInput, { minHeight: 60, textAlignVertical: 'top', marginBottom: 10 }]}
+                placeholder="Review notes (optional)…"
+                placeholderTextColor={COLORS.textMuted}
+                value={pendingReviewNotes}
+                onChangeText={setPendingReviewNotes}
+                multiline
+              />
+              <OtSignOffPicker
+                selected={null}
+                onConfirmed={handleSignOff}
+                otOnly
+                label="Sign Off As"
+                placeholder={signingOff ? 'Signing off…' : 'Select OT to sign off'}
+              />
+            </>
+          )}
         </View>
 
         <View style={{ height: 48 }} />
@@ -288,6 +425,57 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
     paddingTop: 16,
+  },
+  pdfBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    marginBottom: 14,
+  },
+  pdfBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  signOffCardReviewed: {
+    borderColor: COLORS.success,
+    borderLeftColor: COLORS.success,
+    backgroundColor: '#E6F9EE',
+  },
+  signOffHint: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 12,
+    lineHeight: 19,
+  },
+  signOffStatusText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.success,
+    marginBottom: 6,
+  },
+  signOffNotesText: {
+    fontSize: 13,
+    color: COLORS.textSub,
+    fontStyle: 'italic',
+    marginBottom: 10,
+    lineHeight: 19,
+  },
+  revertBtn: {
+    alignSelf: 'flex-start',
+    borderWidth: 1.5,
+    borderColor: COLORS.danger,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  revertBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.danger,
   },
   card: {
     backgroundColor: COLORS.surface,

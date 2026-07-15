@@ -14,6 +14,7 @@ import {
 } from '@/services/scheduleStorage';
 import { getAllAssessments, Assessment, seedDummyData } from '@/services/database';
 import { getAllStudents, addStudent, updateStudent, Student } from '@/services/students';
+import { getAllStaff, addStaff, updateStaff, setStaffPin, StaffMember } from '@/services/staff';
 import { STUDENT_GOALS, COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 import { TIME_SLOTS, DAY_NAMES } from '@/constants/schedule';
@@ -38,14 +39,14 @@ function formatTimestamp(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-// --- PIN Login Modal ---
-interface PinModalProps {
+// --- Admin PIN Login Modal ---
+interface AdminPinModalProps {
   visible: boolean;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
-function PinModal({ visible, onSuccess, onCancel }: PinModalProps) {
+function AdminPinModal({ visible, onSuccess, onCancel }: AdminPinModalProps) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
 
@@ -637,6 +638,170 @@ function EditStudentModal({ visible, student, onClose, onSaved }: EditStudentMod
   );
 }
 
+// --- Add Staff Modal ---
+interface AddStaffModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onAdded: () => void;
+}
+
+function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
+  const [name, setName] = useState('');
+  const [pin, setPin] = useState('');
+  const [isOt, setIsOt] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed || pin.length < 4) return;
+    setSaving(true);
+    addStaff(trimmed, pin, isOt)
+      .then(() => { setName(''); setPin(''); setIsOt(false); onAdded(); onClose(); })
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to add staff.'))
+      .finally(() => setSaving(false));
+  }
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={pinStyles.overlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={pinStyles.card}>
+            <Text style={pinStyles.lockIcon}>🧑‍⚕️</Text>
+            <Text style={pinStyles.title}>Add Staff</Text>
+            <TextInput
+              style={edStyles.textInput}
+              value={name}
+              onChangeText={setName}
+              placeholder="Full name…"
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+            />
+            <TextInput
+              style={[edStyles.textInput, { marginTop: 10 }]}
+              value={pin}
+              onChangeText={setPin}
+              placeholder="Initial PIN (min 4 digits)"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="numeric"
+              secureTextEntry
+              maxLength={8}
+            />
+            <TouchableOpacity
+              style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
+              onPress={() => setIsOt(v => !v)}
+            >
+              <Text style={settStyles.outlineBtnText}>{isOt ? 'OT — tap to unmark' : 'Not an OT — tap to mark as OT'}</Text>
+            </TouchableOpacity>
+            <View style={pinStyles.btnRow}>
+              <TouchableOpacity style={pinStyles.cancelBtn} onPress={() => { setName(''); setPin(''); setIsOt(false); onClose(); }}>
+                <Text style={pinStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[pinStyles.submitBtn, (!name.trim() || pin.length < 4 || saving) && pinStyles.submitBtnDisabled]}
+                onPress={handleSave}
+                disabled={!name.trim() || pin.length < 4 || saving}
+              >
+                <Text style={pinStyles.submitText}>{saving ? 'Saving…' : 'Add'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+// --- Edit Staff Modal (rename / OT flag / active / PIN reset) ---
+interface EditStaffModalProps {
+  visible: boolean;
+  staff: StaffMember | null;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProps) {
+  const [name, setName] = useState('');
+  const [isOt, setIsOt] = useState(false);
+  const [active, setActive] = useState(true);
+  const [newPin, setNewPin] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (staff) { setName(staff.name); setIsOt(staff.isOt); setActive(staff.active); setNewPin(''); }
+  }, [staff]);
+
+  function handleSave() {
+    if (!staff) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    Promise.all([
+      updateStaff(staff.id, { name: trimmed, isOt, active }),
+      newPin.length >= 4 ? setStaffPin(staff.id, newPin) : Promise.resolve(),
+    ])
+      .then(() => { onSaved(); onClose(); })
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to update staff.'))
+      .finally(() => setSaving(false));
+  }
+
+  if (!staff) return null;
+
+  return (
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={pinStyles.overlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={pinStyles.card}>
+            <Text style={pinStyles.lockIcon}>✏️</Text>
+            <Text style={pinStyles.title}>Edit Staff</Text>
+            <TextInput
+              style={edStyles.textInput}
+              value={name}
+              onChangeText={setName}
+              placeholder="Full name…"
+              placeholderTextColor={COLORS.textMuted}
+              autoFocus
+            />
+            <TextInput
+              style={[edStyles.textInput, { marginTop: 10 }]}
+              value={newPin}
+              onChangeText={setNewPin}
+              placeholder="Reset PIN (leave blank to keep current)"
+              placeholderTextColor={COLORS.textMuted}
+              keyboardType="numeric"
+              secureTextEntry
+              maxLength={8}
+            />
+            <TouchableOpacity
+              style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
+              onPress={() => setIsOt(v => !v)}
+            >
+              <Text style={settStyles.outlineBtnText}>{isOt ? 'OT — tap to unmark' : 'Not an OT — tap to mark as OT'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[settStyles.outlineBtn, { marginTop: 8, width: '100%' }]}
+              onPress={() => setActive(a => !a)}
+            >
+              <Text style={settStyles.outlineBtnText}>{active ? 'Active — tap to deactivate' : 'Inactive — tap to reactivate'}</Text>
+            </TouchableOpacity>
+            <View style={pinStyles.btnRow}>
+              <TouchableOpacity style={pinStyles.cancelBtn} onPress={onClose}>
+                <Text style={pinStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[pinStyles.submitBtn, (!name.trim() || saving) && pinStyles.submitBtnDisabled]}
+                onPress={handleSave}
+                disabled={!name.trim() || saving}
+              >
+                <Text style={pinStyles.submitText}>{saving ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
 // --- Settings Section ---
 function SettingsSection() {
   const { setRole } = useRole();
@@ -750,10 +915,21 @@ export default function AdminScreen() {
   const [students, setStudents] = useState<Student[]>([]);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [showAddStaff, setShowAddStaff] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
 
   const loadStudents = useCallback(() => {
     getAllStudents().then(setStudents).catch(() => {});
   }, []);
+
+  const loadStaff = useCallback(() => {
+    getAllStaff().then(setStaff).catch(() => {});
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    loadStaff();
+  }, [tick, loadStaff]));
 
   const loadOverrides = useCallback(() => {
     getAllGoalOverrides().then(list => {
@@ -785,7 +961,7 @@ export default function AdminScreen() {
     return (
       <View style={styles.container}>
         <ScreenHeader subtitle="Admin Panel" />
-        <PinModal
+        <AdminPinModal
           visible={showPinModal}
           onSuccess={handlePinSuccess}
           onCancel={() => { setShowPinModal(false); router.push('/'); }}
@@ -862,6 +1038,33 @@ export default function AdminScreen() {
           );
         })}
 
+        {/* Staff Management */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Staff</Text>
+          <TouchableOpacity style={styles.addStudentBtn} onPress={() => setShowAddStaff(true)} activeOpacity={0.8}>
+            <Text style={styles.addStudentBtnText}>+ Add Staff</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.sectionHint}>Staff confirm their identity with a PIN when saving or reviewing session notes.</Text>
+
+        {staff.map(member => (
+          <View key={member.id} style={[styles.studentCard, !member.active && styles.studentCardInactive]}>
+            <View style={styles.studentCardTop}>
+              <View style={styles.studentInfo}>
+                <Text style={styles.studentName}>{member.name}</Text>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {member.isOt && <View style={styles.editedBadge}><Text style={styles.editedText}>OT</Text></View>}
+                  {!member.active && <View style={styles.inactiveBadge}><Text style={styles.inactiveText}>Inactive</Text></View>}
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => setEditingStaff(member)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.editIcon}>⚙️</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+        {staff.length === 0 && <Text style={styles.sectionHint}>No staff added yet — tap "+ Add Staff" above.</Text>}
+
         <SettingsSection />
         <View style={{ height: 48 }} />
       </ScrollView>
@@ -900,6 +1103,17 @@ export default function AdminScreen() {
         visible={!!editingStudent}
         student={editingStudent}
         onClose={() => setEditingStudent(null)}
+        onSaved={() => setTick(t => t + 1)}
+      />
+      <AddStaffModal
+        visible={showAddStaff}
+        onClose={() => setShowAddStaff(false)}
+        onAdded={() => setTick(t => t + 1)}
+      />
+      <EditStaffModal
+        visible={!!editingStaff}
+        staff={editingStaff}
+        onClose={() => setEditingStaff(null)}
         onSaved={() => setTick(t => t + 1)}
       />
     </View>

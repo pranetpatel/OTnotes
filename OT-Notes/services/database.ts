@@ -48,6 +48,26 @@ export async function deleteAssessment(id: number): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+export async function signOffAssessment(id: number, reviewerStaffId: number, reviewNotes?: string): Promise<void> {
+  const { error } = await supabase.from('assessments').update({
+    status: 'reviewed',
+    reviewed_by: reviewerStaffId,
+    reviewed_at: new Date().toISOString(),
+    review_notes: reviewNotes?.trim() || null,
+  }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
+export async function revertToDraft(id: number): Promise<void> {
+  const { error } = await supabase.from('assessments').update({
+    status: 'draft',
+    reviewed_by: null,
+    reviewed_at: null,
+    review_notes: null,
+  }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function seedDummyData(): Promise<number> {
   const supervisors = ['Sarah K.', 'Dr. Rivera', 'Tom B.', 'Priya N.'];
   const now = new Date();

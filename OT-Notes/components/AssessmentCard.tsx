@@ -62,7 +62,14 @@ export function AssessmentCard({ assessment, onDelete, onEdit }: Props) {
         <TouchableOpacity onPress={() => setExpanded(e => !e)} activeOpacity={0.8}>
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
-              <Text style={styles.studentName}>{assessment.student_name}</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.studentName}>{assessment.student_name}</Text>
+                {assessment.status === 'reviewed' ? (
+                  <View style={styles.reviewedBadge}><Text style={styles.reviewedBadgeText}>Reviewed</Text></View>
+                ) : (
+                  <View style={styles.draftBadge}><Text style={styles.draftBadgeText}>Draft</Text></View>
+                )}
+              </View>
               <View style={styles.metaRow}>
                 <Text style={styles.metaBadge}>{timeStr}</Text>
                 <Text style={styles.metaSep}>·</Text>
@@ -95,6 +102,18 @@ export function AssessmentCard({ assessment, onDelete, onEdit }: Props) {
               <View style={styles.notesWrap}>
                 <Text style={styles.notesLabel}>Session Notes</Text>
                 <Text style={styles.notesText}>{assessment.notes}</Text>
+              </View>
+            ) : null}
+
+            {assessment.status === 'reviewed' && assessment.reviewed_at ? (
+              <View style={[styles.notesWrap, { borderColor: COLORS.success, backgroundColor: '#E6F9EE' }]}>
+                <Text style={[styles.notesLabel, { color: COLORS.success }]}>OT Review</Text>
+                <Text style={styles.notesText}>
+                  Signed off {new Date(assessment.reviewed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </Text>
+                {assessment.review_notes ? (
+                  <Text style={[styles.notesText, { marginTop: 4, fontStyle: 'italic' }]}>{assessment.review_notes}</Text>
+                ) : null}
               </View>
             ) : null}
 
@@ -156,6 +175,41 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: COLORS.text,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  reviewedBadge: {
+    backgroundColor: '#E6F9EE',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: COLORS.success,
+  },
+  reviewedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.success,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  draftBadge: {
+    backgroundColor: COLORS.surfaceHighlight,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  draftBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   metaRow: {
     flexDirection: 'row',

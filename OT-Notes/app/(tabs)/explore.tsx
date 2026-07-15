@@ -13,6 +13,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { AssessmentCard } from '@/components/AssessmentCard';
 import { getAllAssessments, deleteAssessment, Assessment } from '@/services/database';
 import { exportToCSV } from '@/services/csvExport';
+import { exportAssessmentsToBulkPDF } from '@/services/pdfExport';
 import { COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 
@@ -30,6 +31,7 @@ export default function HistoryScreen() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -93,20 +95,50 @@ export default function HistoryScreen() {
     }
   }
 
+  async function handleExportPdf() {
+    if (sortedAssessments.length === 0) {
+      showAlert('Nothing to Export', 'Record some assessments first.');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      await exportAssessmentsToBulkPDF(sortedAssessments);
+    } catch (e: any) {
+      showAlert('Export Failed', e?.message ?? 'Could not export PDF.');
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   const exportButton = (
-    <TouchableOpacity
-      style={[styles.exportBtn, (exporting || assessments.length === 0) && styles.exportBtnDisabled]}
-      onPress={handleExport}
-      disabled={exporting || assessments.length === 0}
-      activeOpacity={0.75}
-    >
-      {exporting ? (
-        <ActivityIndicator size="small" color="#fff" style={{ marginRight: 4 }} />
-      ) : (
-        <Text style={styles.exportIcon}>⬆</Text>
-      )}
-      <Text style={styles.exportText}>{exporting ? 'Exporting…' : 'Export CSV'}</Text>
-    </TouchableOpacity>
+    <View style={styles.exportRow}>
+      <TouchableOpacity
+        style={[styles.exportBtn, (exporting || assessments.length === 0) && styles.exportBtnDisabled]}
+        onPress={handleExport}
+        disabled={exporting || assessments.length === 0}
+        activeOpacity={0.75}
+      >
+        {exporting ? (
+          <ActivityIndicator size="small" color="#fff" style={{ marginRight: 4 }} />
+        ) : (
+          <Text style={styles.exportIcon}>⬆</Text>
+        )}
+        <Text style={styles.exportText}>{exporting ? 'Exporting…' : 'CSV'}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.exportBtn, styles.exportBtnPdf, (exportingPdf || assessments.length === 0) && styles.exportBtnDisabled]}
+        onPress={handleExportPdf}
+        disabled={exportingPdf || assessments.length === 0}
+        activeOpacity={0.75}
+      >
+        {exportingPdf ? (
+          <ActivityIndicator size="small" color="#fff" style={{ marginRight: 4 }} />
+        ) : (
+          <Text style={styles.exportIcon}>⬆</Text>
+        )}
+        <Text style={styles.exportText}>{exportingPdf ? 'Exporting…' : 'PDF'}</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   const countText = assessments.length === 0
@@ -184,6 +216,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
+  exportRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   exportBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -197,6 +233,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 6,
     elevation: 3,
+  },
+  exportBtnPdf: {
+    backgroundColor: COLORS.accent,
+    shadowColor: COLORS.accent,
   },
   exportBtnDisabled: {
     opacity: 0.45,
