@@ -12,14 +12,13 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StudentPicker } from '@/components/StudentPicker';
-import { StaffIdentityPicker } from '@/components/StaffIdentityPicker';
 import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { getAllAssessments, updateAssessment, signOffAssessment, revertToDraft, Assessment } from '@/services/database';
-import { StaffMember, getAllStaff } from '@/services/staff';
 import { StaffIdentityPicker as OtSignOffPicker } from '@/components/StaffIdentityPicker';
-import { useRole } from '@/context/RoleContext';
+import { StaffMember, getAllStaff } from '@/services/staff';
+import { useAuth } from '@/context/AuthContext';
 import { exportAssessmentToPDF } from '@/services/pdfExport';
 import { showAlert } from '@/utils/alert';
 import {
@@ -50,7 +49,6 @@ export default function EditAssessmentScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const [student, setStudent] = useState<string | null>(null);
-  const [supervisorStaff, setSupervisorStaff] = useState<StaffMember | null>(null);
   const [goal1, setGoal1] = useState<string[]>([]);
   const [goal2Primary, setGoal2Primary] = useState<string[]>([]);
   const [goal2Coord, setGoal2Coord] = useState<string[]>([]);
@@ -66,7 +64,7 @@ export default function EditAssessmentScreen() {
   const [reverting, setReverting] = useState(false);
   const [pendingReviewNotes, setPendingReviewNotes] = useState('');
   const [exportingPdf, setExportingPdf] = useState(false);
-  const { isAdmin } = useRole();
+  const { staff, isAdmin } = useAuth();
 
   const studentSafetySkills = student ? (STUDENT_GOALS[student]?.safetySkills ?? null) : null;
 
@@ -81,8 +79,6 @@ export default function EditAssessmentScreen() {
           return;
         }
         setStudent(found.student_name);
-        const matchedStaff = staffList.find(s => s.name === found.supervisor_name) ?? null;
-        setSupervisorStaff(matchedStaff);
         setGoal1(found.goal1_selections ?? []);
         setGoal2Primary(found.goal2_primary_selections ?? []);
         setGoal2Coord(found.goal2_coordination_selections ?? []);
@@ -116,8 +112,8 @@ export default function EditAssessmentScreen() {
   }
 
   async function handleExportPdf() {
-    if (!student || !supervisorStaff) {
-      showAlert('Cannot Export', 'Select a student and confirm staff identity first.');
+    if (!student || !staff) {
+      showAlert('Cannot Export', 'Select a student first.');
       return;
     }
     setExportingPdf(true);
@@ -125,7 +121,7 @@ export default function EditAssessmentScreen() {
       const current: Assessment = {
         id: Number(id),
         student_name: student,
-        supervisor_name: supervisorStaff.name,
+        supervisor_name: staff.name,
         timestamp: originalTimestamp,
         goal1_selections: goal1,
         goal2_primary_selections: goal2Primary,
@@ -168,7 +164,7 @@ export default function EditAssessmentScreen() {
   function buildErrors(): FieldErrors {
     const errs: FieldErrors = {};
     if (!student) errs.student = 'Student not selected — tap to choose a student.';
-    if (!supervisorStaff) errs.supervisor = 'Confirm staff identity (name + PIN) before saving.';
+    if (!staff) errs.supervisor = 'Your staff profile could not be loaded. Try signing out and back in.';
     const hasAnyGoal =
       goal1.length > 0 || goal2Primary.length > 0 || goal2Coord.length > 0 || goal3.length > 0;
     if (!hasAnyGoal) errs.goals = 'Select at least one goal indicator before saving.';
@@ -189,8 +185,8 @@ export default function EditAssessmentScreen() {
     try {
       await updateAssessment(Number(id), {
         student_name: student!,
-        supervisor_name: supervisorStaff!.name,
-        staff_id: supervisorStaff!.id,
+        supervisor_name: staff!.name,
+        staff_id: staff!.id,
         timestamp: originalTimestamp,
         goal1_selections: goal1,
         goal2_primary_selections: goal2Primary,
@@ -246,12 +242,10 @@ export default function EditAssessmentScreen() {
 
         {student && (
           <>
-            <StaffIdentityPicker
-              selected={supervisorStaff}
-              onConfirmed={(s: StaffMember) => { setSupervisorStaff(s); setFieldErrors(e => ({ ...e, supervisor: undefined })); }}
-              label="Supervisor"
-              placeholder="Confirm your identity"
-            />
+            <View style={styles.card}>
+              <Text style={styles.sectionLabel}>Supervisor</Text>
+              <Text style={styles.signedInAsText}>{staff?.name ?? 'Loading…'}</Text>
+            </View>
             {fieldErrors.supervisor ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>⚠ {fieldErrors.supervisor}</Text>
@@ -498,6 +492,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 10,
+  },
+  signedInAsText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
   },
   supervisorInput: {
     fontSize: 16,

@@ -12,13 +12,11 @@ import {
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { StudentPicker } from '@/components/StudentPicker';
-import { StaffIdentityPicker } from '@/components/StaffIdentityPicker';
 import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { saveAssessment } from '@/services/database';
-import { StaffMember } from '@/services/staff';
-import { useStaffSession } from '@/context/StaffSessionContext';
+import { useAuth } from '@/context/AuthContext';
 import { showAlert } from '@/utils/alert';
 import { getCurrentSlot, getNextSlot, formatMinutes, toISODate, addDays } from '@/constants/schedule';
 import { getStudentsForSlot } from '@/services/scheduleStorage';
@@ -73,7 +71,7 @@ interface FieldErrors {
 
 export default function AssessmentScreen() {
   const form = useForm();
-  const { activeStaff, setActiveStaff } = useStaffSession();
+  const { staff } = useAuth();
   const params = useLocalSearchParams<{ student?: string }>();
   const [submitting, setSubmitting] = useState(false);
   const [savedStudent, setSavedStudent] = useState<string | null>(null);
@@ -119,7 +117,7 @@ export default function AssessmentScreen() {
   function buildErrors(): FieldErrors {
     const errs: FieldErrors = {};
     if (!form.student) errs.student = 'Student not selected — tap to choose a student.';
-    if (!activeStaff) errs.supervisor = 'Confirm your staff identity (name + PIN) before saving.';
+    if (!staff) errs.supervisor = 'Your staff profile could not be loaded. Try signing out and back in.';
     const hasAnyGoal =
       form.goal1.length > 0 ||
       form.goal2Primary.length > 0 ||
@@ -143,8 +141,8 @@ export default function AssessmentScreen() {
     try {
       await saveAssessment({
         student_name: form.student!,
-        supervisor_name: activeStaff!.name,
-        staff_id: activeStaff!.id,
+        supervisor_name: staff!.name,
+        staff_id: staff!.id,
         timestamp: reportDate.toISOString(),
         goal1_selections: form.goal1,
         goal2_primary_selections: form.goal2Primary,
@@ -283,12 +281,10 @@ export default function AssessmentScreen() {
 
           {form.student && (
             <>
-              <StaffIdentityPicker
-                selected={activeStaff}
-                onConfirmed={(s: StaffMember) => { setActiveStaff(s); setFieldErrors(e => ({ ...e, supervisor: undefined })); }}
-                label="Supervisor"
-                placeholder="Confirm your identity"
-              />
+              <View style={styles.card}>
+                <Text style={styles.sectionLabel}>Supervisor</Text>
+                <Text style={styles.signedInAsText}>{staff?.name ?? 'Loading…'}</Text>
+              </View>
               {fieldErrors.supervisor ? (
                 <View style={styles.errorBanner}>
                   <Text style={styles.errorBannerText}>⚠ {fieldErrors.supervisor}</Text>
@@ -434,6 +430,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: 10,
+  },
+  signedInAsText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
   },
   supervisorInput: {
     fontSize: 16,
