@@ -43,3 +43,6 @@ app-example
 /android
 
 .vercel
+
+# Supabase CLI local cache (project ref, pooler URL, versions)
+supabase/.temp/
