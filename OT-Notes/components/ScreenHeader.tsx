@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, Platform } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { COLORS } from '@/constants/data';
+import { useAuth } from '@/context/AuthContext';
+import { showAlert } from '@/utils/alert';
 
 interface Props {
   subtitle?: string;
@@ -8,6 +10,15 @@ interface Props {
 }
 
 export function ScreenHeader({ subtitle, right }: Props) {
+  const { staff, signOut } = useAuth();
+
+  function handleSignOutPress() {
+    showAlert('Sign Out', staff ? `Sign out ${staff.name}?` : 'Sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
+
   return (
     <View style={styles.wrapper}>
       <View style={styles.row}>
@@ -25,6 +36,12 @@ export function ScreenHeader({ subtitle, right }: Props) {
       {subtitle ? (
         <Text style={styles.subtitle}>{subtitle}</Text>
       ) : null}
+      {staff && (
+        <TouchableOpacity style={styles.userRow} onPress={handleSignOutPress} activeOpacity={0.7}>
+          <Text style={styles.userText}>Signed in as {staff.name}</Text>
+          <Text style={styles.switchText}>Switch User</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.rule} />
     </View>
   );
@@ -73,6 +90,22 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     marginBottom: 12,
     letterSpacing: 0.2,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  userText: {
+    fontSize: 12,
+    color: COLORS.textSub,
+    fontWeight: '600',
+  },
+  switchText: {
+    fontSize: 12,
+    color: COLORS.accent,
+    fontWeight: '700',
   },
   rule: {
     height: 1,

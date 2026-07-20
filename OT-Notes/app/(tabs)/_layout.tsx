@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, Text, View, StyleSheet } from 'react-native';
 import { COLORS } from '@/constants/data';
+import { useAuth } from '@/context/AuthContext';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -12,6 +13,8 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 }
 
 export default function TabLayout() {
+  const { isAdmin } = useAuth();
+
   return (
     <Tabs
       screenOptions={{
@@ -59,6 +62,7 @@ export default function TabLayout() {
         options={{
           title: 'Admin',
           tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" focused={focused} />,
+          href: isAdmin ? undefined : null,
         }}
       />
     </Tabs>

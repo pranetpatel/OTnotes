@@ -11,11 +11,13 @@ import {
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { AssessmentCard } from '@/components/AssessmentCard';
-import { getAllAssessments, deleteAssessment, Assessment } from '@/services/database';
+import { PdfExportModal } from '@/components/PdfExportModal';
+import { getAllAssessments, deleteAssessment, signOffAssessment, Assessment } from '@/services/database';
 import { exportToCSV } from '@/services/csvExport';
 import { exportAssessmentsToBulkPDF } from '@/services/pdfExport';
 import { COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
+import { useAuth } from '@/context/AuthContext';
 
 type SortKey = 'date' | 'name' | 'time';
 type SortDir = 'asc' | 'desc';
@@ -28,12 +30,14 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const { staff } = useAuth();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfModalVisible, setPdfModalVisible] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [signingOffId, setSigningOffId] = useState<number | null>(null);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -80,6 +84,19 @@ export default function HistoryScreen() {
     router.push({ pathname: '/edit-assessment', params: { id: String(id) } });
   }
 
+  function handleSignOff(id: number) {
+    if (!staff) return;
+    setSigningOffId(id);
+    signOffAssessment(id, staff.id)
+      .then(() => {
+        setAssessments(prev => prev.map(a => (a.id === id
+          ? { ...a, status: 'reviewed', reviewed_by: staff.id, reviewed_at: new Date().toISOString() }
+          : a)));
+      })
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to sign off.'))
+      .finally(() => setSigningOffId(null));
+  }
+
   async function handleExport() {
     if (sortedAssessments.length === 0) {
       showAlert('Nothing to Export', 'Record some assessments first.');
@@ -95,18 +112,19 @@ export default function HistoryScreen() {
     }
   }
 
-  async function handleExportPdf() {
+  function handleOpenPdfModal() {
     if (sortedAssessments.length === 0) {
       showAlert('Nothing to Export', 'Record some assessments first.');
       return;
     }
-    setExportingPdf(true);
+    setPdfModalVisible(true);
+  }
+
+  async function handleExportPdf(scoped: Assessment[]) {
     try {
-      await exportAssessmentsToBulkPDF(sortedAssessments);
+      await exportAssessmentsToBulkPDF(scoped);
     } catch (e: any) {
       showAlert('Export Failed', e?.message ?? 'Could not export PDF.');
-    } finally {
-      setExportingPdf(false);
     }
   }
 
@@ -126,17 +144,13 @@ export default function HistoryScreen() {
         <Text style={styles.exportText}>{exporting ? 'Exporting…' : 'CSV'}</Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[styles.exportBtn, styles.exportBtnPdf, (exportingPdf || assessments.length === 0) && styles.exportBtnDisabled]}
-        onPress={handleExportPdf}
-        disabled={exportingPdf || assessments.length === 0}
+        style={[styles.exportBtn, styles.exportBtnPdf, assessments.length === 0 && styles.exportBtnDisabled]}
+        onPress={handleOpenPdfModal}
+        disabled={assessments.length === 0}
         activeOpacity={0.75}
       >
-        {exportingPdf ? (
-          <ActivityIndicator size="small" color="#fff" style={{ marginRight: 4 }} />
-        ) : (
-          <Text style={styles.exportIcon}>⬆</Text>
-        )}
-        <Text style={styles.exportText}>{exportingPdf ? 'Exporting…' : 'PDF'}</Text>
+        <Text style={styles.exportIcon}>⬆</Text>
+        <Text style={styles.exportText}>PDF</Text>
       </TouchableOpacity>
     </View>
   );
@@ -175,6 +189,13 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <ScreenHeader subtitle={countText} right={exportButton} />
 
+      <PdfExportModal
+        visible={pdfModalVisible}
+        assessments={sortedAssessments}
+        onClose={() => setPdfModalVisible(false)}
+        onExport={handleExportPdf}
+      />
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={COLORS.primary} />
@@ -193,7 +214,13 @@ export default function HistoryScreen() {
           data={sortedAssessments}
           keyExtractor={item => String(item.id)}
           renderItem={({ item }) => (
-            <AssessmentCard assessment={item} onDelete={handleDelete} onEdit={handleEdit} />
+            <AssessmentCard
+              assessment={item}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+              onSignOff={handleSignOff}
+              signingOffId={signingOffId}
+            />
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

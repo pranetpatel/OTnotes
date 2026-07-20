@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Assessment } from '@/services/database';
 import { COLORS } from '@/constants/data';
+import { useAuth } from '@/context/AuthContext';
 
 interface Props {
   assessment: Assessment;
   onDelete: (id: number) => void;
   onEdit?: (id: number) => void;
+  onSignOff?: (id: number) => void;
+  signingOffId?: number | null;
 }
 
 function Chip({ label, aqua }: { label: string; aqua?: boolean }) {
@@ -32,8 +35,10 @@ function GoalRow({ icon, label, items, aqua }: { icon: string; label: string; it
   );
 }
 
-export function AssessmentCard({ assessment, onDelete, onEdit }: Props) {
+export function AssessmentCard({ assessment, onDelete, onEdit, onSignOff, signingOffId }: Props) {
+  const { isOt } = useAuth();
   const [expanded, setExpanded] = useState(false);
+  const isSigningOff = signingOffId === assessment.id;
   const dt = new Date(assessment.timestamp);
   const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -118,6 +123,20 @@ export function AssessmentCard({ assessment, onDelete, onEdit }: Props) {
             ) : null}
 
             <View style={styles.actionRow}>
+              {assessment.status !== 'reviewed' && isOt && onSignOff && (
+                <TouchableOpacity
+                  style={[styles.signOffBtn, isSigningOff && styles.signOffBtnDisabled]}
+                  onPress={() => onSignOff(assessment.id!)}
+                  disabled={isSigningOff}
+                  activeOpacity={0.75}
+                >
+                  {isSigningOff ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.signOffBtnText}>✓ Sign Off</Text>
+                  )}
+                </TouchableOpacity>
+              )}
               {onEdit && (
                 <TouchableOpacity
                   style={styles.editBtn}
@@ -342,6 +361,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 8,
+  },
+  signOffBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: COLORS.success,
+    marginRight: 'auto',
+  },
+  signOffBtnDisabled: {
+    opacity: 0.6,
+  },
+  signOffBtnText: {
+    fontSize: 13,
+    color: '#fff',
+    fontWeight: '700',
   },
   editBtn: {
     paddingVertical: 7,

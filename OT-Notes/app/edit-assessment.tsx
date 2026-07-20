@@ -16,7 +16,6 @@ import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { getAllAssessments, updateAssessment, signOffAssessment, revertToDraft, Assessment } from '@/services/database';
-import { OtSignOffReauth } from '@/components/OtSignOffReauth';
 import { getAllStaff } from '@/services/staff';
 import { useAuth } from '@/context/AuthContext';
 import { exportAssessmentToPDF } from '@/services/pdfExport';
@@ -64,7 +63,7 @@ export default function EditAssessmentScreen() {
   const [reverting, setReverting] = useState(false);
   const [pendingReviewNotes, setPendingReviewNotes] = useState('');
   const [exportingPdf, setExportingPdf] = useState(false);
-  const { staff, isAdmin } = useAuth();
+  const { staff, isAdmin, isOt } = useAuth();
 
   const studentSafetySkills = student ? (STUDENT_GOALS[student]?.safetySkills ?? null) : null;
 
@@ -373,10 +372,10 @@ export default function EditAssessmentScreen() {
                 </TouchableOpacity>
               )}
             </>
-          ) : (
+          ) : isOt ? (
             <>
               <Text style={styles.signOffHint}>
-                This note is still a draft. An OT must confirm their identity to sign off.
+                This note is still a draft. Sign off to mark it reviewed.
               </Text>
               <TextInput
                 style={[styles.supervisorInput, { minHeight: 60, textAlignVertical: 'top', marginBottom: 10 }]}
@@ -386,9 +385,19 @@ export default function EditAssessmentScreen() {
                 onChangeText={setPendingReviewNotes}
                 multiline
               />
-              <OtSignOffReauth onConfirmed={handleSignOff} />
-              {signingOff && <Text style={styles.signOffHint}>Signing off…</Text>}
+              <TouchableOpacity
+                style={[styles.updateBtn, signingOff && styles.updateBtnDisabled]}
+                onPress={handleSignOff}
+                disabled={signingOff}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.updateText}>{signingOff ? 'Signing off…' : '✓ Sign Off'}</Text>
+              </TouchableOpacity>
             </>
+          ) : (
+            <Text style={styles.signOffHint}>
+              An OT must be logged in to sign off this note.
+            </Text>
           )}
         </View>
 
