@@ -16,8 +16,8 @@ import { GoalSection } from '@/components/GoalSection';
 import { SafetyGoalSection } from '@/components/SafetyGoalSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
 import { getAllAssessments, updateAssessment, signOffAssessment, revertToDraft, Assessment } from '@/services/database';
-import { StaffIdentityPicker as OtSignOffPicker } from '@/components/StaffIdentityPicker';
-import { StaffMember, getAllStaff } from '@/services/staff';
+import { OtSignOffReauth } from '@/components/OtSignOffReauth';
+import { getAllStaff } from '@/services/staff';
 import { useAuth } from '@/context/AuthContext';
 import { exportAssessmentToPDF } from '@/services/pdfExport';
 import { showAlert } from '@/utils/alert';
@@ -96,16 +96,17 @@ export default function EditAssessmentScreen() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  function handleSignOff(reviewer: StaffMember) {
+  function handleSignOff() {
+    if (!staff) return;
     setSigningOff(true);
-    signOffAssessment(Number(id), reviewer.id, pendingReviewNotes)
+    signOffAssessment(Number(id), staff.id, pendingReviewNotes)
       .then(() => {
         setStatus('reviewed');
-        setReviewedByName(reviewer.name);
+        setReviewedByName(staff.name);
         setReviewedAt(new Date().toISOString());
         setReviewNotesText(pendingReviewNotes.trim() || null);
         setPendingReviewNotes('');
-        showAlert('Signed Off', `${reviewer.name} has signed off this note.`);
+        showAlert('Signed Off', `${staff.name} has signed off this note.`);
       })
       .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to sign off.'))
       .finally(() => setSigningOff(false));
@@ -385,13 +386,8 @@ export default function EditAssessmentScreen() {
                 onChangeText={setPendingReviewNotes}
                 multiline
               />
-              <OtSignOffPicker
-                selected={null}
-                onConfirmed={handleSignOff}
-                otOnly
-                label="Sign Off As"
-                placeholder={signingOff ? 'Signing off…' : 'Select OT to sign off'}
-              />
+              <OtSignOffReauth onConfirmed={handleSignOff} />
+              {signingOff && <Text style={styles.signOffHint}>Signing off…</Text>}
             </>
           )}
         </View>

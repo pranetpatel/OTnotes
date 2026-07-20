@@ -3,8 +3,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { initDatabase } from '@/services/database';
-import { RoleProvider } from '@/context/RoleContext';
-import { StaffSessionProvider } from '@/context/StaffSessionContext';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/constants/data';
 
@@ -47,12 +45,8 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RoleProvider>
-        <StaffSessionProvider>
-          <RootNavigator />
-          <StatusBar style="dark" />
-        </StaffSessionProvider>
-      </RoleProvider>
+      <RootNavigator />
+      <StatusBar style="dark" />
     </AuthProvider>
   );
 }

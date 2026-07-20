@@ -155,22 +155,3 @@ export async function saveGoalOverride(override: StudentGoalOverride): Promise<v
   if (error) throw new Error(error.message);
 }
 
-// --- Admin settings ---
-
-export async function verifyAdminPin(pin: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'admin_pin')
-    .maybeSingle();
-  if (error || !data) return pin === '1234';
-  return (data as any).value === pin;
-}
-
-export async function setAdminPin(newPin: string): Promise<void> {
-  const { error } = await supabase.from('app_settings').upsert([{
-    key: 'admin_pin',
-    value: newPin,
-  }], { onConflict: 'key' });
-  if (error) throw new Error(error.message);
-}

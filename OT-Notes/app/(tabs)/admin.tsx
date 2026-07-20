@@ -4,17 +4,17 @@ import {
   Modal, TextInput, FlatList, ActivityIndicator,
   Platform, KeyboardAvoidingView,
 } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { useRole } from '@/context/RoleContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   getAllGoalOverrides, saveGoalOverride, StudentGoalOverride,
-  verifyAdminPin, setAdminPin,
   getStudentRecurringSlots, addRecurringSchedule, removeRecurringSchedule,
 } from '@/services/scheduleStorage';
 import { getAllAssessments, Assessment, seedDummyData } from '@/services/database';
 import { getAllStudents, addStudent, updateStudent, Student } from '@/services/students';
-import { getAllStaff, addStaff, updateStaff, setStaffPin, StaffMember } from '@/services/staff';
+import { getAllStaff, updateStaff, StaffMember } from '@/services/staff';
+import { createStaffLogin, resetStaffPassword } from '@/services/auth';
 import { STUDENT_GOALS, COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 import { TIME_SLOTS, DAY_NAMES } from '@/constants/schedule';
@@ -37,65 +37,6 @@ function getEffectiveGoalSync(name: string, override: StudentGoalOverride | null
 
 function formatTimestamp(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
-
-// --- Admin PIN Login Modal ---
-interface AdminPinModalProps {
-  visible: boolean;
-  onSuccess: () => void;
-  onCancel: () => void;
-}
-
-function AdminPinModal({ visible, onSuccess, onCancel }: AdminPinModalProps) {
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState(false);
-
-  function handleSubmit() {
-    verifyAdminPin(pin).then(valid => {
-      if (valid) {
-        setPin('');
-        setError(false);
-        onSuccess();
-      } else {
-        setError(true);
-        setPin('');
-      }
-    });
-  }
-
-  return (
-    <Modal visible={visible} animationType="fade" transparent>
-      <View style={pinStyles.overlay}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <View style={pinStyles.card}>
-            <Text style={pinStyles.lockIcon}>🔐</Text>
-            <Text style={pinStyles.title}>Admin Access</Text>
-            <Text style={pinStyles.subtitle}>Enter your 4-digit PIN</Text>
-            <TextInput
-              style={[pinStyles.pinInput, error && pinStyles.pinInputError]}
-              placeholder="• • • •"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="numeric"
-              secureTextEntry
-              maxLength={6}
-              value={pin}
-              onChangeText={v => { setPin(v); setError(false); }}
-              autoFocus
-            />
-            {error && <Text style={pinStyles.errorText}>Incorrect PIN</Text>}
-            <View style={pinStyles.btnRow}>
-              <TouchableOpacity style={pinStyles.cancelBtn} onPress={onCancel}>
-                <Text style={pinStyles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[pinStyles.submitBtn, !pin && pinStyles.submitBtnDisabled]} onPress={handleSubmit} disabled={!pin}>
-                <Text style={pinStyles.submitText}>Enter</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
-  );
 }
 
 // --- Goal Editor Modal ---
@@ -647,16 +588,28 @@ interface AddStaffModalProps {
 
 function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
   const [name, setName] = useState('');
-  const [pin, setPin] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isOt, setIsOt] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const canSave = name.trim() && email.trim() && password.length >= 6;
+
+  function reset() {
+    setName(''); setEmail(''); setPassword(''); setIsOt(false); setIsAdmin(false);
+  }
+
   function handleSave() {
-    const trimmed = name.trim();
-    if (!trimmed || pin.length < 4) return;
+    if (!canSave) return;
     setSaving(true);
-    addStaff(trimmed, pin, isOt)
-      .then(() => { setName(''); setPin(''); setIsOt(false); onAdded(); onClose(); })
+    createStaffLogin({ name: name.trim(), email: email.trim(), password, isOt, isAdmin })
+      .then(() => {
+        showAlert('Staff Added', `${name.trim()} can now sign in with ${email.trim()} and the password you set. Share those with them directly.`);
+        reset();
+        onAdded();
+        onClose();
+      })
       .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to add staff.'))
       .finally(() => setSaving(false));
   }
@@ -668,6 +621,7 @@ function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
           <View style={pinStyles.card}>
             <Text style={pinStyles.lockIcon}>🧑‍⚕️</Text>
             <Text style={pinStyles.title}>Add Staff</Text>
+            <Text style={pinStyles.subtitle}>Ask them what personal email they'd like to use to log in.</Text>
             <TextInput
               style={edStyles.textInput}
               value={name}
@@ -678,13 +632,21 @@ function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
             />
             <TextInput
               style={[edStyles.textInput, { marginTop: 10 }]}
-              value={pin}
-              onChangeText={setPin}
-              placeholder="Initial PIN (min 4 digits)"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Their email address…"
               placeholderTextColor={COLORS.textMuted}
-              keyboardType="numeric"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+            />
+            <TextInput
+              style={[edStyles.textInput, { marginTop: 10 }]}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Temporary password (min 6 characters)"
+              placeholderTextColor={COLORS.textMuted}
               secureTextEntry
-              maxLength={8}
             />
             <TouchableOpacity
               style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
@@ -692,14 +654,20 @@ function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
             >
               <Text style={settStyles.outlineBtnText}>{isOt ? 'OT — tap to unmark' : 'Not an OT — tap to mark as OT'}</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[settStyles.outlineBtn, { marginTop: 8, width: '100%' }]}
+              onPress={() => setIsAdmin(v => !v)}
+            >
+              <Text style={settStyles.outlineBtnText}>{isAdmin ? 'Admin — tap to unmark' : 'Not an admin — tap to mark as admin'}</Text>
+            </TouchableOpacity>
             <View style={pinStyles.btnRow}>
-              <TouchableOpacity style={pinStyles.cancelBtn} onPress={() => { setName(''); setPin(''); setIsOt(false); onClose(); }}>
+              <TouchableOpacity style={pinStyles.cancelBtn} onPress={() => { reset(); onClose(); }}>
                 <Text style={pinStyles.cancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[pinStyles.submitBtn, (!name.trim() || pin.length < 4 || saving) && pinStyles.submitBtnDisabled]}
+                style={[pinStyles.submitBtn, (!canSave || saving) && pinStyles.submitBtnDisabled]}
                 onPress={handleSave}
-                disabled={!name.trim() || pin.length < 4 || saving}
+                disabled={!canSave || saving}
               >
                 <Text style={pinStyles.submitText}>{saving ? 'Saving…' : 'Add'}</Text>
               </TouchableOpacity>
@@ -722,12 +690,13 @@ interface EditStaffModalProps {
 function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProps) {
   const [name, setName] = useState('');
   const [isOt, setIsOt] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [active, setActive] = useState(true);
-  const [newPin, setNewPin] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (staff) { setName(staff.name); setIsOt(staff.isOt); setActive(staff.active); setNewPin(''); }
+    if (staff) { setName(staff.name); setIsOt(staff.isOt); setIsAdmin(staff.isAdmin); setActive(staff.active); setNewPassword(''); }
   }, [staff]);
 
   function handleSave() {
@@ -736,8 +705,8 @@ function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProp
     if (!trimmed) return;
     setSaving(true);
     Promise.all([
-      updateStaff(staff.id, { name: trimmed, isOt, active }),
-      newPin.length >= 4 ? setStaffPin(staff.id, newPin) : Promise.resolve(),
+      updateStaff(staff.id, { name: trimmed, isOt, isAdmin, active }),
+      newPassword.length >= 6 && staff.hasLogin ? resetStaffPassword(staff.id, newPassword) : Promise.resolve(),
     ])
       .then(() => { onSaved(); onClose(); })
       .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to update staff.'))
@@ -753,6 +722,9 @@ function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProp
           <View style={pinStyles.card}>
             <Text style={pinStyles.lockIcon}>✏️</Text>
             <Text style={pinStyles.title}>Edit Staff</Text>
+            {!staff.hasLogin && (
+              <Text style={[pinStyles.subtitle, { color: COLORS.danger }]}>No login set up yet for this staff member.</Text>
+            )}
             <TextInput
               style={edStyles.textInput}
               value={name}
@@ -761,21 +733,27 @@ function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProp
               placeholderTextColor={COLORS.textMuted}
               autoFocus
             />
-            <TextInput
-              style={[edStyles.textInput, { marginTop: 10 }]}
-              value={newPin}
-              onChangeText={setNewPin}
-              placeholder="Reset PIN (leave blank to keep current)"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="numeric"
-              secureTextEntry
-              maxLength={8}
-            />
+            {staff.hasLogin && (
+              <TextInput
+                style={[edStyles.textInput, { marginTop: 10 }]}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                placeholder="Reset password (leave blank to keep current)"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+              />
+            )}
             <TouchableOpacity
               style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
               onPress={() => setIsOt(v => !v)}
             >
               <Text style={settStyles.outlineBtnText}>{isOt ? 'OT — tap to unmark' : 'Not an OT — tap to mark as OT'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[settStyles.outlineBtn, { marginTop: 8, width: '100%' }]}
+              onPress={() => setIsAdmin(v => !v)}
+            >
+              <Text style={settStyles.outlineBtnText}>{isAdmin ? 'Admin — tap to unmark' : 'Not an admin — tap to mark as admin'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[settStyles.outlineBtn, { marginTop: 8, width: '100%' }]}
@@ -804,9 +782,7 @@ function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProp
 
 // --- Settings Section ---
 function SettingsSection() {
-  const { setRole } = useRole();
-  const [showPinChange, setShowPinChange] = useState(false);
-  const [newPin, setNewPin] = useState('');
+  const { staff, signOut } = useAuth();
   const [seeding, setSeeding] = useState(false);
 
   function handleSeedData() {
@@ -829,49 +805,12 @@ function SettingsSection() {
     );
   }
 
-  function handleSavePin() {
-    if (newPin.length < 4) { showAlert('Invalid PIN', 'PIN must be at least 4 digits.'); return; }
-    setAdminPin(newPin)
-      .then(() => {
-        setNewPin('');
-        setShowPinChange(false);
-        showAlert('PIN Updated', 'Your admin PIN has been changed.');
-      })
-      .catch((e: any) => showAlert('Error', e?.message));
-  }
-
   return (
     <View style={settStyles.container}>
       <Text style={settStyles.sectionTitle}>Settings</Text>
 
       <View style={settStyles.card}>
-        <Text style={settStyles.cardLabel}>Admin PIN</Text>
-        {showPinChange ? (
-          <>
-            <TextInput
-              style={settStyles.input}
-              value={newPin}
-              onChangeText={setNewPin}
-              placeholder="New PIN (min 4 digits)"
-              placeholderTextColor={COLORS.textMuted}
-              keyboardType="numeric"
-              secureTextEntry
-              maxLength={8}
-            />
-            <View style={settStyles.pinBtnRow}>
-              <TouchableOpacity style={settStyles.cancelBtn} onPress={() => { setShowPinChange(false); setNewPin(''); }}>
-                <Text style={settStyles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={settStyles.saveBtn} onPress={handleSavePin}>
-                <Text style={settStyles.saveBtnText}>Change PIN</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <TouchableOpacity style={settStyles.outlineBtn} onPress={() => setShowPinChange(true)} activeOpacity={0.75}>
-            <Text style={settStyles.outlineBtnText}>Change PIN</Text>
-          </TouchableOpacity>
-        )}
+        <Text style={settStyles.cardLabel}>Signed in as {staff?.name ?? '…'}</Text>
       </View>
 
       <TouchableOpacity
@@ -890,13 +829,13 @@ function SettingsSection() {
 
       <TouchableOpacity
         style={settStyles.exitBtn}
-        onPress={() => showAlert('Switch to Supervisor Mode', 'Exit admin view?', [
+        onPress={() => showAlert('Sign Out', 'Sign out of this device?', [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Switch', onPress: () => setRole('supervisor') },
+          { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
         ])}
         activeOpacity={0.8}
       >
-        <Text style={settStyles.exitBtnText}>Exit Admin Mode</Text>
+        <Text style={settStyles.exitBtnText}>Sign Out</Text>
       </TouchableOpacity>
     </View>
   );
@@ -904,9 +843,7 @@ function SettingsSection() {
 
 // --- Main Admin Screen ---
 export default function AdminScreen() {
-  const { isAdmin, setRole } = useRole();
-  const router = useRouter();
-  const [showPinModal, setShowPinModal] = useState(!isAdmin);
+  const { isAdmin } = useAuth();
   const [goalEditorStudent, setGoalEditorStudent] = useState<string | null>(null);
   const [progressStudent, setProgressStudent] = useState<string | null>(null);
   const [scheduleStudent, setScheduleStudent] = useState<string | null>(null);
@@ -948,32 +885,14 @@ export default function AdminScreen() {
     if (students.length > 0) loadOverrides();
   }, [tick, students, loadOverrides]));
 
-  function handlePinSuccess() {
-    setRole('admin');
-    setShowPinModal(false);
-  }
-
-  useFocusEffect(useCallback(() => {
-    if (!isAdmin) setShowPinModal(true);
-  }, [isAdmin]));
-
   if (!isAdmin) {
     return (
       <View style={styles.container}>
         <ScreenHeader subtitle="Admin Panel" />
-        <AdminPinModal
-          visible={showPinModal}
-          onSuccess={handlePinSuccess}
-          onCancel={() => { setShowPinModal(false); router.push('/'); }}
-        />
-        {!showPinModal && (
-          <View style={styles.center}>
-            <TouchableOpacity style={styles.unlockBtn} onPress={() => setShowPinModal(true)}>
-              <Text style={styles.unlockIcon}>🔐</Text>
-              <Text style={styles.unlockText}>Tap to unlock Admin</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.center}>
+          <Text style={styles.unlockIcon}>🔒</Text>
+          <Text style={styles.unlockText}>Your account doesn't have admin access.</Text>
+        </View>
       </View>
     );
   }

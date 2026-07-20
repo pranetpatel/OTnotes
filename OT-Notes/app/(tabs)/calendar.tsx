@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { useRole } from '@/context/RoleContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   getSlotsForDay,
   getCurrentSlot,
@@ -296,7 +296,7 @@ function SlotCard({
 
 // --- Main Calendar Screen ---
 export default function CalendarScreen() {
-  const { isAdmin } = useRole();
+  const { isAdmin } = useAuth();
   const [date, setDate] = useState(new Date());
   const [allMakeups, setAllMakeups] = useState<MakeupSession[]>([]);
   const [allRecurring, setAllRecurring] = useState<RecurringSchedule[]>([]);
