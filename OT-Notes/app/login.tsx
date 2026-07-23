@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,23 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { Href, router } from 'expo-router';
 import { signIn } from '@/services/auth';
+import { useAuth } from '@/context/AuthContext';
 import { COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 
 export default function LoginScreen() {
+  const { mustSetPassword, session } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (mustSetPassword) {
+      router.replace('/set-password' as Href);
+    }
+  }, [mustSetPassword, session]);
 
   async function handleSubmit() {
     if (!email.trim() || !password) {
@@ -80,9 +89,12 @@ export default function LoginScreen() {
               <Text style={styles.submitText}>Sign In</Text>
             )}
           </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/forgot-password' as Href)} style={styles.forgotWrap}>
+            <Text style={styles.forgot}>Forgot password?</Text>
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.hint}>Don't have a login yet? Ask your admin to add you in the Staff section.</Text>
+        <Text style={styles.hint}>Don't have a login yet? Ask your admin to invite you in the Staff section.</Text>
       </View>
     </KeyboardAvoidingView>
   );
@@ -163,6 +175,8 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.55, shadowOpacity: 0 },
   submitText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  forgotWrap: { marginTop: 14, alignItems: 'center' },
+  forgot: { fontSize: 13, color: COLORS.primary, fontWeight: '600' },
   hint: {
     fontSize: 12,
     color: COLORS.textMuted,

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getSetPasswordUrl } from './appUrl';
 
 export interface StaffProfile {
   id: number;
@@ -63,38 +64,69 @@ export async function verifyStaffPassword(email: string, password: string): Prom
   return ok;
 }
 
-export async function createStaffLogin(params: {
+async function adminStaffRequest(body: Record<string, unknown>): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) throw new Error('Not signed in.');
+
+  const functionsUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-create-staff`;
+  const res = await fetch(functionsUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload?.error ?? `Staff admin request failed (${res.status})`);
+}
+
+/** Invite a new staff member by email — they set their own password via the link. */
+export async function inviteStaff(params: {
   name: string;
   email: string;
-  password: string;
   isOt: boolean;
   isAdmin: boolean;
 }): Promise<void> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  if (!token) throw new Error('Not signed in.');
-
-  const functionsUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-create-staff`;
-  const res = await fetch(functionsUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ action: 'create', ...params }),
+  await adminStaffRequest({
+    action: 'invite',
+    name: params.name,
+    email: params.email,
+    isOt: params.isOt,
+    isAdmin: params.isAdmin,
+    redirectTo: getSetPasswordUrl(),
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.error ?? `Failed to create staff login (${res.status})`);
 }
 
-export async function resetStaffPassword(staffId: number, password: string): Promise<void> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  if (!token) throw new Error('Not signed in.');
-
-  const functionsUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/admin-create-staff`;
-  const res = await fetch(functionsUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ action: 'reset_password', staffId, password, email: '' }),
+/** Resend invite / password-setup email for an existing staff login. */
+export async function resendStaffInvite(staffId: number): Promise<void> {
+  await adminStaffRequest({
+    action: 'resend_invite',
+    staffId,
+    email: '',
+    redirectTo: getSetPasswordUrl(),
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body?.error ?? `Failed to reset password (${res.status})`);
+}
+
+/** Admin-triggered password reset email for a staff member. */
+export async function sendStaffPasswordReset(staffId: number): Promise<void> {
+  await adminStaffRequest({
+    action: 'send_password_reset',
+    staffId,
+    email: '',
+    redirectTo: getSetPasswordUrl(),
+  });
+}
+
+/** Public "forgot password" — emails a reset link if the account exists. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: getSetPasswordUrl(),
+  });
+  if (error) throw new Error(error.message);
+}
+
+/** Set or change password while authenticated via invite / recovery session. */
+export async function updatePassword(password: string): Promise<void> {
+  if (password.length < 6) throw new Error('Password must be at least 6 characters.');
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw new Error(error.message);
 }

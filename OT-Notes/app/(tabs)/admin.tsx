@@ -14,7 +14,7 @@ import {
 import { getAllAssessments, Assessment, seedDummyData } from '@/services/database';
 import { getAllStudents, addStudent, updateStudent, Student } from '@/services/students';
 import { getAllStaff, updateStaff, StaffMember } from '@/services/staff';
-import { createStaffLogin, resetStaffPassword } from '@/services/auth';
+import { inviteStaff, resendStaffInvite, sendStaffPasswordReset } from '@/services/auth';
 import { STUDENT_GOALS, COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 import { TIME_SLOTS, DAY_NAMES } from '@/constants/schedule';
@@ -589,28 +589,30 @@ interface AddStaffModalProps {
 function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [isOt, setIsOt] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const canSave = name.trim() && email.trim() && password.length >= 6;
+  const canSave = name.trim() && email.trim().includes('@');
 
   function reset() {
-    setName(''); setEmail(''); setPassword(''); setIsOt(false); setIsAdmin(false);
+    setName(''); setEmail(''); setIsOt(false); setIsAdmin(false);
   }
 
   function handleSave() {
     if (!canSave) return;
     setSaving(true);
-    createStaffLogin({ name: name.trim(), email: email.trim(), password, isOt, isAdmin })
+    inviteStaff({ name: name.trim(), email: email.trim(), isOt, isAdmin })
       .then(() => {
-        showAlert('Staff Added', `${name.trim()} can now sign in with ${email.trim()} and the password you set. Share those with them directly.`);
+        showAlert(
+          'Invite sent',
+          `${name.trim()} will get an email at ${email.trim()} to create their own password and sign in.`
+        );
         reset();
         onAdded();
         onClose();
       })
-      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to add staff.'))
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to invite staff.'))
       .finally(() => setSaving(false));
   }
 
@@ -620,8 +622,10 @@ function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={pinStyles.card}>
             <Text style={pinStyles.lockIcon}>🧑‍⚕️</Text>
-            <Text style={pinStyles.title}>Add Staff</Text>
-            <Text style={pinStyles.subtitle}>Ask them what personal email they'd like to use to log in.</Text>
+            <Text style={pinStyles.title}>Invite Staff</Text>
+            <Text style={pinStyles.subtitle}>
+              We’ll email them an invite link so they can create their own password. You don’t set one for them.
+            </Text>
             <TextInput
               style={edStyles.textInput}
               value={name}
@@ -639,14 +643,6 @@ function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
-            />
-            <TextInput
-              style={[edStyles.textInput, { marginTop: 10 }]}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Temporary password (min 6 characters)"
-              placeholderTextColor={COLORS.textMuted}
-              secureTextEntry
             />
             <TouchableOpacity
               style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
@@ -669,7 +665,7 @@ function AddStaffModal({ visible, onClose, onAdded }: AddStaffModalProps) {
                 onPress={handleSave}
                 disabled={!canSave || saving}
               >
-                <Text style={pinStyles.submitText}>{saving ? 'Saving…' : 'Add'}</Text>
+                <Text style={pinStyles.submitText}>{saving ? 'Sending…' : 'Send invite'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -692,11 +688,11 @@ function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProp
   const [isOt, setIsOt] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [active, setActive] = useState(true);
-  const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
+  const [emailBusy, setEmailBusy] = useState(false);
 
   useEffect(() => {
-    if (staff) { setName(staff.name); setIsOt(staff.isOt); setIsAdmin(staff.isAdmin); setActive(staff.active); setNewPassword(''); }
+    if (staff) { setName(staff.name); setIsOt(staff.isOt); setIsAdmin(staff.isAdmin); setActive(staff.active); }
   }, [staff]);
 
   function handleSave() {
@@ -704,13 +700,28 @@ function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProp
     const trimmed = name.trim();
     if (!trimmed) return;
     setSaving(true);
-    Promise.all([
-      updateStaff(staff.id, { name: trimmed, isOt, isAdmin, active }),
-      newPassword.length >= 6 && staff.hasLogin ? resetStaffPassword(staff.id, newPassword) : Promise.resolve(),
-    ])
+    updateStaff(staff.id, { name: trimmed, isOt, isAdmin, active })
       .then(() => { onSaved(); onClose(); })
       .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to update staff.'))
       .finally(() => setSaving(false));
+  }
+
+  function handleResendInvite() {
+    if (!staff) return;
+    setEmailBusy(true);
+    resendStaffInvite(staff.id)
+      .then(() => showAlert('Invite resent', `A new setup link was emailed for ${staff.name}.`))
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to resend invite.'))
+      .finally(() => setEmailBusy(false));
+  }
+
+  function handleSendReset() {
+    if (!staff) return;
+    setEmailBusy(true);
+    sendStaffPasswordReset(staff.id)
+      .then(() => showAlert('Reset email sent', `${staff.name} will get a link to choose a new password.`))
+      .catch((e: any) => showAlert('Error', e?.message ?? 'Failed to send reset email.'))
+      .finally(() => setEmailBusy(false));
   }
 
   if (!staff) return null;
@@ -734,14 +745,26 @@ function EditStaffModal({ visible, staff, onClose, onSaved }: EditStaffModalProp
               autoFocus
             />
             {staff.hasLogin && (
-              <TextInput
-                style={[edStyles.textInput, { marginTop: 10 }]}
-                value={newPassword}
-                onChangeText={setNewPassword}
-                placeholder="Reset password (leave blank to keep current)"
-                placeholderTextColor={COLORS.textMuted}
-                secureTextEntry
-              />
+              <>
+                <TouchableOpacity
+                  style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
+                  onPress={handleResendInvite}
+                  disabled={emailBusy}
+                >
+                  <Text style={settStyles.outlineBtnText}>
+                    {emailBusy ? 'Sending…' : 'Resend invite / setup email'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[settStyles.outlineBtn, { marginTop: 8, width: '100%' }]}
+                  onPress={handleSendReset}
+                  disabled={emailBusy}
+                >
+                  <Text style={settStyles.outlineBtnText}>
+                    {emailBusy ? 'Sending…' : 'Email password reset link'}
+                  </Text>
+                </TouchableOpacity>
+              </>
             )}
             <TouchableOpacity
               style={[settStyles.outlineBtn, { marginTop: 12, width: '100%' }]}
@@ -961,10 +984,10 @@ export default function AdminScreen() {
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitle}>Staff</Text>
           <TouchableOpacity style={styles.addStudentBtn} onPress={() => setShowAddStaff(true)} activeOpacity={0.8}>
-            <Text style={styles.addStudentBtnText}>+ Add Staff</Text>
+            <Text style={styles.addStudentBtnText}>+ Invite Staff</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.sectionHint}>Staff confirm their identity with a PIN when saving or reviewing session notes.</Text>
+        <Text style={styles.sectionHint}>Invite staff by email — they create their own password from the link.</Text>
 
         {staff.map(member => (
           <View key={member.id} style={[styles.studentCard, !member.active && styles.studentCardInactive]}>
@@ -982,7 +1005,7 @@ export default function AdminScreen() {
             </View>
           </View>
         ))}
-        {staff.length === 0 && <Text style={styles.sectionHint}>No staff added yet — tap "+ Add Staff" above.</Text>}
+        {staff.length === 0 && <Text style={styles.sectionHint}>No staff yet — tap "+ Invite Staff" above.</Text>}
 
         <SettingsSection />
         <View style={{ height: 48 }} />

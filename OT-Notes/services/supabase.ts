@@ -33,7 +33,9 @@ export const supabase = createClient(
       storage: Platform.OS === 'web' ? webStorage : AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      // Invite / recovery emails land with tokens in the URL hash (or ?code=).
+      // Without this, the link opens the app but never establishes a session.
+      detectSessionInUrl: Platform.OS === 'web',
     },
   }
 );

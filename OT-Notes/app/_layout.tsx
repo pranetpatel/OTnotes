@@ -11,7 +11,7 @@ export const unstable_settings = {
 };
 
 function RootNavigator() {
-  const { session, loading } = useAuth();
+  const { session, loading, mustSetPassword } = useAuth();
 
   if (loading) {
     return (
@@ -21,9 +21,11 @@ function RootNavigator() {
     );
   }
 
+  const canUseApp = !!session && !mustSetPassword;
+
   return (
     <Stack>
-      <Stack.Protected guard={!!session}>
+      <Stack.Protected guard={canUseApp}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         <Stack.Screen
@@ -31,8 +33,10 @@ function RootNavigator() {
           options={{ presentation: 'modal', title: 'Edit Assessment', headerShown: true }}
         />
       </Stack.Protected>
-      <Stack.Protected guard={!session}>
+      <Stack.Protected guard={!canUseApp}>
         <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+        <Stack.Screen name="set-password" options={{ headerShown: false }} />
       </Stack.Protected>
     </Stack>
   );
