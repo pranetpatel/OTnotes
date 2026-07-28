@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter, Href } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { PasswordInput } from '@/components/PasswordInput';
 import { useAuth } from '@/context/AuthContext';
 import { changePassword, requestPasswordReset } from '@/services/auth';
 import { COLORS } from '@/constants/data';
@@ -131,39 +131,27 @@ export default function AccountScreen() {
           </Text>
 
           <Text style={styles.fieldLabel}>Current password</Text>
-          <TextInput
-            style={styles.input}
+          <PasswordInput
             placeholder="••••••••"
             placeholderTextColor={COLORS.textMuted}
             value={currentPassword}
             onChangeText={setCurrentPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
           />
 
           <Text style={styles.fieldLabel}>New password</Text>
-          <TextInput
-            style={styles.input}
+          <PasswordInput
             placeholder="At least 6 characters"
             placeholderTextColor={COLORS.textMuted}
             value={newPassword}
             onChangeText={setNewPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
           />
 
           <Text style={styles.fieldLabel}>Confirm new password</Text>
-          <TextInput
-            style={styles.input}
+          <PasswordInput
             placeholder="••••••••"
             placeholderTextColor={COLORS.textMuted}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleChangePassword}
           />

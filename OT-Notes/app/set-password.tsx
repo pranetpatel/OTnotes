@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Image,
@@ -13,14 +12,16 @@ import {
 import { Href, router } from 'expo-router';
 import { updatePassword } from '@/services/auth';
 import { useAuth } from '@/context/AuthContext';
+import { PasswordInput } from '@/components/PasswordInput';
 import { COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 
 export default function SetPasswordScreen() {
-  const { session, mustSetPassword, clearMustSetPassword, loading } = useAuth();
+  const { session, mustSetPassword, clearMustSetPassword, signOut, loading } = useAuth();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     if (loading) return;
@@ -29,6 +30,18 @@ export default function SetPasswordScreen() {
       router.replace('/login' as Href);
     }
   }, [session, mustSetPassword, loading]);
+
+  async function handleBackToSignIn() {
+    setLeaving(true);
+    try {
+      await signOut();
+      router.replace('/login' as Href);
+    } catch (e: any) {
+      showAlert('Could not sign out', e?.message ?? 'Try again.');
+    } finally {
+      setLeaving(false);
+    }
+  }
 
   async function handleSubmit() {
     if (!session) {
@@ -78,27 +91,19 @@ export default function SetPasswordScreen() {
           ) : (
             <>
               <Text style={styles.fieldLabel}>New password</Text>
-              <TextInput
-                style={styles.input}
+              <PasswordInput
                 placeholder="••••••••"
                 placeholderTextColor={COLORS.textMuted}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
                 returnKeyType="next"
               />
               <Text style={styles.fieldLabel}>Confirm password</Text>
-              <TextInput
-                style={styles.input}
+              <PasswordInput
                 placeholder="••••••••"
                 placeholderTextColor={COLORS.textMuted}
                 value={confirm}
                 onChangeText={setConfirm}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={handleSubmit}
               />
@@ -118,8 +123,16 @@ export default function SetPasswordScreen() {
           )}
         </View>
 
-        <TouchableOpacity onPress={() => router.replace('/login' as Href)} style={styles.linkWrap}>
-          <Text style={styles.link}>Back to sign in</Text>
+        <TouchableOpacity
+          onPress={handleBackToSignIn}
+          disabled={leaving}
+          style={styles.linkWrap}
+        >
+          {leaving ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Text style={styles.link}>Back to sign in</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

@@ -20,6 +20,16 @@ function writeMustSetPasswordFlag(value: boolean) {
   }
 }
 
+/** Strip invite/recovery tokens from the URL so they don't re-trigger setup. */
+function clearRecoveryUrl() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const { pathname, hash, search } = window.location;
+    if (hash || search.includes('type=')) {
+      window.history.replaceState(null, '', pathname);
+    }
+  }
+}
+
 /** True when the current URL is an invite / recovery auth callback. */
 function urlRequiresPasswordSetup(): boolean {
   if (typeof window === 'undefined') return false;
@@ -110,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function handleSignOut() {
     clearMustSetPassword();
+    clearRecoveryUrl();
     await signOutService();
     setSession(null);
     setStaff(null);

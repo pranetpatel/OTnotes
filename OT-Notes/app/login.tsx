@@ -13,6 +13,7 @@ import {
 import { Href, router } from 'expo-router';
 import { signIn } from '@/services/auth';
 import { useAuth } from '@/context/AuthContext';
+import { PasswordInput } from '@/components/PasswordInput';
 import { COLORS } from '@/constants/data';
 import { showAlert } from '@/utils/alert';
 
@@ -23,7 +24,7 @@ export default function LoginScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (mustSetPassword) {
+    if (mustSetPassword && session) {
       router.replace('/set-password' as Href);
     }
   }, [mustSetPassword, session]);
@@ -67,13 +68,11 @@ export default function LoginScreen() {
             returnKeyType="next"
           />
           <Text style={styles.fieldLabel}>Password</Text>
-          <TextInput
-            style={styles.input}
+          <PasswordInput
             placeholder="••••••••"
             placeholderTextColor={COLORS.textMuted}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
             returnKeyType="done"
             onSubmitEditing={handleSubmit}
           />
