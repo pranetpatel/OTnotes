@@ -130,3 +130,15 @@ export async function updatePassword(password: string): Promise<void> {
   const { error } = await supabase.auth.updateUser({ password });
   if (error) throw new Error(error.message);
 }
+
+/** Change password while signed in — verifies the current password first. */
+export async function changePassword(params: {
+  email: string;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  if (params.newPassword.length < 6) throw new Error('Password must be at least 6 characters.');
+  const ok = await verifyStaffPassword(params.email, params.currentPassword);
+  if (!ok) throw new Error('Current password is incorrect.');
+  await updatePassword(params.newPassword);
+}

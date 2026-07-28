@@ -1,8 +1,8 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { useRouter, Href } from 'expo-router';
 import { COLORS } from '@/constants/data';
 import { useAuth } from '@/context/AuthContext';
-import { showAlert } from '@/utils/alert';
 
 interface Props {
   subtitle?: string;
@@ -10,13 +10,11 @@ interface Props {
 }
 
 export function ScreenHeader({ subtitle, right }: Props) {
-  const { staff, signOut } = useAuth();
+  const { staff } = useAuth();
+  const router = useRouter();
 
-  function handleSignOutPress() {
-    showAlert('Sign Out', staff ? `Sign out ${staff.name}?` : 'Sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
-    ]);
+  function handleAccountPress() {
+    router.push('/account' as Href);
   }
 
   return (
@@ -37,9 +35,9 @@ export function ScreenHeader({ subtitle, right }: Props) {
         <Text style={styles.subtitle}>{subtitle}</Text>
       ) : null}
       {staff && (
-        <TouchableOpacity style={styles.userRow} onPress={handleSignOutPress} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.userRow} onPress={handleAccountPress} activeOpacity={0.7}>
           <Text style={styles.userText}>Signed in as {staff.name}</Text>
-          <Text style={styles.switchText}>Switch User</Text>
+          <Text style={styles.switchText}>Account</Text>
         </TouchableOpacity>
       )}
       <View style={styles.rule} />
