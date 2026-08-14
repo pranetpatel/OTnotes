@@ -90,6 +90,15 @@ export default function SetPasswordScreen() {
             <ActivityIndicator size="large" color={COLORS.primary} style={{ marginVertical: 20 }} />
           ) : (
             <>
+              {session.user?.email && (
+                <View style={styles.accountBanner}>
+                  <Text style={styles.accountBannerLabel}>Setting a password for</Text>
+                  <Text style={styles.accountBannerEmail}>{session.user.email}</Text>
+                  <Text style={styles.accountBannerHint}>
+                    Not you? Tap "Back to sign in" below instead of continuing.
+                  </Text>
+                </View>
+              )}
               <Text style={styles.fieldLabel}>New password</Text>
               <PasswordInput
                 placeholder="••••••••"
@@ -178,6 +187,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
     gap: 4,
+  },
+  accountBanner: {
+    backgroundColor: COLORS.primaryDim,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    padding: 12,
+    marginBottom: 4,
+  },
+  accountBannerLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primaryLight,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  accountBannerEmail: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  accountBannerHint: {
+    fontSize: 12,
+    color: COLORS.textSub,
+    lineHeight: 17,
   },
   fieldLabel: {
     fontSize: 11,
