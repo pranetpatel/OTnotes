@@ -13,6 +13,49 @@ export const GOAL3_OPTIONS = [
   'Independent',
 ];
 
+export const PARTICIPATION_OPTIONS = [
+  'Fully Participated',
+  'Participated with Supports',
+  'Variable Participation',
+  'Limited Participation Today',
+];
+
+export const SUPPORT_OPTIONS = [
+  'Independent',
+  'Occasional Support',
+  'Frequent Support',
+  'Ongoing Support',
+];
+
+export const STRATEGY_GROUPS: { label: string; options: string[] }[] = [
+  {
+    label: 'Structure & Communication',
+    options: ['Visual Schedule', 'First-Then Language', 'Choice Within Structure', 'Clear, Concise Language'],
+  },
+  {
+    label: 'Teaching Strategies',
+    options: [
+      'Demonstration / Modeling',
+      'Verbal Cueing',
+      'Visual Cueing',
+      'Physical Guidance',
+      'Break Task into Smaller Steps',
+      'Graded Progression',
+      'Repetition / Repeated Practice',
+      'Rhythm / Counting',
+      'Prompt Fading',
+    ],
+  },
+  {
+    label: 'Regulation Supports',
+    options: ['Heavy Work', 'Co-Regulation', 'Deep Pressure / Firm Support', 'Movement Breaks', 'Processing Time'],
+  },
+  {
+    label: 'Engagement Strategies',
+    options: ['Play-Based Learning', 'Child-Led Interests', 'Positive Reinforcement'],
+  },
+];
+
 export type StudentGoal = {
   focus: string;
   activeGoals: string[];

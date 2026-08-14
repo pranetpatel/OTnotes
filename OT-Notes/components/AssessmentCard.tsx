@@ -43,7 +43,15 @@ export function AssessmentCard({ assessment, onDelete, onEdit, onSignOff, signin
   const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+  const isNewFormat =
+    (assessment.participation_selections?.length ?? 0) > 0 ||
+    (assessment.support_selections?.length ?? 0) > 0 ||
+    (assessment.strategy_selections?.length ?? 0) > 0 ||
+    Boolean(assessment.strategy_other?.trim()) ||
+    (assessment.goal_comments?.some(gc => gc.comment.trim().length > 0) ?? false);
+
   const allGoalsEmpty =
+    !isNewFormat &&
     assessment.goal1_selections.length === 0 &&
     assessment.goal2_primary_selections.length === 0 &&
     assessment.goal2_coordination_selections.length === 0 &&
@@ -93,7 +101,24 @@ export function AssessmentCard({ assessment, onDelete, onEdit, onSignOff, signin
         {expanded && (
           <View style={styles.body}>
             <View style={styles.divider} />
-            {allGoalsEmpty ? (
+            {isNewFormat ? (
+              <>
+                <GoalRow icon="🙋" label="Participation" items={assessment.participation_selections ?? []} />
+                <GoalRow icon="🤝" label="Support Required" items={assessment.support_selections ?? []} aqua />
+                <GoalRow
+                  icon="🧩"
+                  label="Strategies Used"
+                  items={assessment.strategy_other?.trim() ? [...(assessment.strategy_selections ?? []), assessment.strategy_other.trim()] : (assessment.strategy_selections ?? [])}
+                  aqua
+                />
+                {(assessment.goal_comments ?? []).filter(gc => gc.comment.trim()).map((gc, i) => (
+                  <View key={i} style={styles.notesWrap}>
+                    <Text style={styles.notesLabel}>Goal {i + 1}: {gc.goal}</Text>
+                    <Text style={styles.notesText}>{gc.comment}</Text>
+                  </View>
+                ))}
+              </>
+            ) : allGoalsEmpty ? (
               <Text style={styles.emptyGoals}>No goal data recorded.</Text>
             ) : (
               <>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { COLORS } from '@/constants/data';
 
 interface OptionGroupProps {
@@ -46,26 +46,29 @@ function OptionGroup({ label, options, selected, onChange }: OptionGroupProps) {
   );
 }
 
-interface GoalSectionProps {
+interface ChecklistCardProps {
+  icon: string;
   title: string;
-  goalNumber: number;
   groups: {
     label?: string;
     options: string[];
     selected: string[];
     onChange: (updated: string[]) => void;
   }[];
+  otherValue?: string;
+  onOtherChange?: (text: string) => void;
+  otherLabel?: string;
 }
 
-export function GoalSection({ title, goalNumber, groups }: GoalSectionProps) {
-  const hasSelections = groups.some(g => g.selected.length > 0);
+export function ChecklistCard({ icon, title, groups, otherValue, onOtherChange, otherLabel }: ChecklistCardProps) {
+  const hasSelections = groups.some(g => g.selected.length > 0) || Boolean(otherValue?.trim());
   return (
     <View style={[styles.card, hasSelections && styles.cardActive]}>
       <View style={styles.leftAccent} />
       <View style={styles.inner}>
         <View style={styles.titleRow}>
           <View style={[styles.badge, hasSelections && styles.badgeActive]}>
-            <Text style={styles.badgeText}>{goalNumber}</Text>
+            <Text style={styles.badgeText}>{icon}</Text>
           </View>
           <Text style={styles.title}>{title}</Text>
           {hasSelections && <View style={styles.activeDot} />}
@@ -79,6 +82,18 @@ export function GoalSection({ title, goalNumber, groups }: GoalSectionProps) {
             onChange={g.onChange}
           />
         ))}
+        {onOtherChange && (
+          <View style={styles.groupWrap}>
+            <Text style={styles.groupLabel}>{otherLabel ?? 'Other'}</Text>
+            <TextInput
+              style={styles.otherInput}
+              placeholder="Add anything not listed above…"
+              placeholderTextColor={COLORS.textMuted}
+              value={otherValue}
+              onChangeText={onOtherChange}
+            />
+          </View>
+        )}
       </View>
     </View>
   );
@@ -128,7 +143,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
   },
   badgeText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
     color: '#fff',
   },
@@ -211,5 +226,16 @@ const styles = StyleSheet.create({
   },
   pillTextInactive: {
     color: COLORS.textSub,
+  },
+  otherInput: {
+    fontSize: 15,
+    color: COLORS.text,
+    backgroundColor: COLORS.bg,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    minHeight: 46,
   },
 });

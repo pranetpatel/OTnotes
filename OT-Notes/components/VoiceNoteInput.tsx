@@ -17,12 +17,15 @@ interface Props {
   value: string;
   onChange: (text: string) => void;
   studentName: string | null;
-  goalSelections: {
-    goal1: string[];
-    goal2Primary: string[];
-    goal2Coord: string[];
-    goal3: string[];
+  sessionContext: {
+    participation: string[];
+    support: string[];
+    strategies: string[];
+    strategyOther: string;
+    goalComments: { goal: string; comment: string }[];
   };
+  label?: string;
+  placeholder?: string;
 }
 
 const RECOGNITION_OPTIONS = {
@@ -77,7 +80,7 @@ function requestIOSSpeechPermission(): Promise<'granted' | 'denied' | 'unavailab
   });
 }
 
-export function VoiceNoteInput({ value, onChange, studentName, goalSelections }: Props) {
+export function VoiceNoteInput({ value, onChange, studentName, sessionContext, label, placeholder }: Props) {
   const AUTO_STOP_SILENCE_MS = 8000;
   const [listening, setListening] = useState(false);
   const [voiceAvailable, setVoiceAvailable] = useState(false);
@@ -299,12 +302,7 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
     try {
       const refined = await refineNoteWithOpenAI(value, {
         studentName,
-        goalSelections: {
-          goal1: goalSelections.goal1,
-          goal2Primary: goalSelections.goal2Primary,
-          goal2Coordination: goalSelections.goal2Coord,
-          goal3: goalSelections.goal3,
-        },
+        sessionContext,
       });
       onChange(refined);
       Alert.alert('Notes refined', 'You can still edit the text before saving.');
@@ -320,7 +318,7 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.label}>Notes</Text>
+        <Text style={styles.label}>{label ?? 'Notes'}</Text>
         <TouchableOpacity
           style={[styles.micBtn, listening ? styles.micBtnActive : styles.micBtnIdle]}
           onPress={toggleListen}
@@ -356,7 +354,7 @@ export function VoiceNoteInput({ value, onChange, studentName, goalSelections }:
       <TextInput
         ref={inputRef}
         style={styles.input}
-        placeholder="Tap mic or type notes here..."
+        placeholder={placeholder ?? 'Tap mic or type notes here...'}
         placeholderTextColor={COLORS.textMuted}
         value={value}
         onChangeText={onChange}

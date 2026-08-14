@@ -200,15 +200,24 @@ function ProgressModal({ visible, studentName, goalOverride, onClose }: Progress
     setAiAnalysis('');
 
     const goal = goalOverride;
-    const sessionSummaries = assessments.slice(0, 20).map(a =>
-      `Date: ${new Date(a.timestamp).toLocaleDateString()}
-Supervisor: ${a.supervisor_name}
-Goal 1 (Core Stability): ${a.goal1_selections.join(', ') || 'Not rated'}
+    const sessionSummaries = assessments.slice(0, 20).map(a => {
+      const goalComments = (a.goal_comments ?? []).filter(gc => gc.comment.trim());
+      const isNewFormat = (a.participation_selections?.length ?? 0) > 0 || (a.support_selections?.length ?? 0) > 0 || goalComments.length > 0;
+      const strategies = a.strategy_other?.trim() ? [...(a.strategy_selections ?? []), a.strategy_other.trim()] : (a.strategy_selections ?? []);
+      const body = isNewFormat
+        ? `Participation: ${(a.participation_selections ?? []).join(', ') || 'Not recorded'}
+Support Required: ${(a.support_selections ?? []).join(', ') || 'Not recorded'}
+Strategies Used: ${strategies.join(', ') || 'None'}
+${goalComments.map(gc => `${gc.goal}: ${gc.comment}`).join('\n')}`
+        : `Goal 1 (Core Stability): ${a.goal1_selections.join(', ') || 'Not rated'}
 Goal 2 Effort: ${a.goal2_primary_selections.join(', ') || 'Not rated'}
 Goal 2 Coordination: ${a.goal2_coordination_selections.join(', ') || 'Not rated'}
-Goal 3 (Task Completion): ${a.goal3_selections.join(', ') || 'Not rated'}
-Notes: ${a.notes || 'None'}`
-    ).join('\n\n---\n\n');
+Goal 3 (Task Completion): ${a.goal3_selections.join(', ') || 'Not rated'}`;
+      return `Date: ${new Date(a.timestamp).toLocaleDateString()}
+Supervisor: ${a.supervisor_name}
+${body}
+Notes: ${a.notes || 'None'}`;
+    }).join('\n\n---\n\n');
 
     const prompt = `You are an occupational therapist specializing in aquatic therapy. Analyze the following session data for a student named ${studentName} and provide a concise clinical progress summary.
 
@@ -303,6 +312,15 @@ Keep your response concise and clinically actionable.`;
               <View key={a.id} style={progStyles.sessionCard}>
                 <Text style={progStyles.sessionDate}>{formatTimestamp(a.timestamp)}</Text>
                 <Text style={progStyles.sessionSup}>Supervisor: {a.supervisor_name}</Text>
+                {(a.participation_selections?.length ?? 0) > 0 && (
+                  <Text style={progStyles.sessionGoal}>Participation: {a.participation_selections!.join(', ')}</Text>
+                )}
+                {(a.support_selections?.length ?? 0) > 0 && (
+                  <Text style={progStyles.sessionGoal}>Support: {a.support_selections!.join(', ')}</Text>
+                )}
+                {(a.goal_comments ?? []).filter(gc => gc.comment.trim()).map((gc, i) => (
+                  <Text key={i} style={progStyles.sessionGoal} numberOfLines={2}>{gc.goal}: {gc.comment}</Text>
+                ))}
                 {a.goal1_selections.length > 0 && (
                   <Text style={progStyles.sessionGoal}>Goal 1: {a.goal1_selections.join(', ')}</Text>
                 )}

@@ -47,6 +47,11 @@ create table assessments (
   goal2_coordination_selections jsonb default '[]',
   goal3_selections jsonb default '[]',
   safety_skill_selections jsonb default '[]',
+  participation_selections jsonb default '[]',
+  support_selections jsonb default '[]',
+  strategy_selections jsonb default '[]',
+  strategy_other text default '',
+  goal_comments jsonb default '[]',
   notes text default ''
 );
 

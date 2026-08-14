@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   View,
@@ -7,9 +7,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
-import { COLORS, STUDENT_GOALS, StudentGoal } from '@/constants/data';
-import { getGoalOverride } from '@/services/scheduleStorage';
+import { COLORS, StudentGoal } from '@/constants/data';
+import { resolveStudentGoals } from '@/services/scheduleStorage';
 
 interface Props {
   studentName: string | null;
@@ -41,12 +42,19 @@ function Section({ title, items, color }: { title: string; items: string[]; colo
 }
 
 export function GoalSheetModal({ studentName, visible, onClose }: Props) {
-  if (!studentName) return null;
+  const [goals, setGoals] = useState<StudentGoal | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const override = getGoalOverride(studentName);
-  const goals: StudentGoal | undefined = override
-    ? { focus: override.focus, activeGoals: override.activeGoals, safetySkills: override.safetySkills, adaptations: override.adaptations, progressNote: override.progressNote }
-    : STUDENT_GOALS[studentName];
+  useEffect(() => {
+    if (!visible || !studentName) return;
+    setLoading(true);
+    resolveStudentGoals(studentName)
+      .then(setGoals)
+      .catch(() => setGoals(null))
+      .finally(() => setLoading(false));
+  }, [visible, studentName]);
+
+  if (!studentName) return null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -73,7 +81,11 @@ export function GoalSheetModal({ studentName, visible, onClose }: Props) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {!goals ? (
+          {loading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
+          ) : !goals ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>📋</Text>
               <Text style={styles.emptyTitle}>No Goal Sheet</Text>

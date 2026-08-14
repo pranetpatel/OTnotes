@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { STUDENT_GOALS, StudentGoal } from '@/constants/data';
 
 export interface RecurringSchedule {
   id: string;
@@ -141,6 +142,23 @@ export async function getGoalOverride(studentName: string): Promise<StudentGoalO
     adaptations: data.adaptations ?? [],
     progressNote: data.progress_note ?? '',
   };
+}
+
+// Resolves a student's goal sheet: a saved override takes priority over the
+// hardcoded STUDENT_GOALS seed data, falling back to it when no override exists
+// or the override has no active goals recorded yet.
+export async function resolveStudentGoals(studentName: string): Promise<StudentGoal | null> {
+  const override = await getGoalOverride(studentName);
+  if (override && override.activeGoals.length > 0) {
+    return {
+      focus: override.focus,
+      activeGoals: override.activeGoals,
+      safetySkills: override.safetySkills,
+      adaptations: override.adaptations,
+      progressNote: override.progressNote,
+    };
+  }
+  return STUDENT_GOALS[studentName] ?? null;
 }
 
 export async function saveGoalOverride(override: StudentGoalOverride): Promise<void> {

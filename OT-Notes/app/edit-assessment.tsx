@@ -12,25 +12,16 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StudentPicker } from '@/components/StudentPicker';
-import { GoalSection } from '@/components/GoalSection';
-import { SafetyGoalSection } from '@/components/SafetyGoalSection';
+import { ChecklistCard } from '@/components/ChecklistCard';
+import { GoalCommentsSection } from '@/components/GoalCommentsSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
-import { getAllAssessments, updateAssessment, signOffAssessment, revertToDraft, Assessment } from '@/services/database';
+import { getAllAssessments, updateAssessment, signOffAssessment, revertToDraft, Assessment, GoalComment } from '@/services/database';
 import { getAllStaff } from '@/services/staff';
 import { useAuth } from '@/context/AuthContext';
 import { exportAssessmentToPDF } from '@/services/pdfExport';
 import { showAlert } from '@/utils/alert';
-import {
-  COLORS,
-  GOAL1_LABEL,
-  GOAL1_OPTIONS,
-  GOAL2_LABEL,
-  GOAL2_COORDINATION_OPTIONS,
-  GOAL2_PRIMARY_OPTIONS,
-  GOAL3_LABEL,
-  GOAL3_OPTIONS,
-  STUDENT_GOALS,
-} from '@/constants/data';
+import { resolveStudentGoals } from '@/services/scheduleStorage';
+import { COLORS, PARTICIPATION_OPTIONS, SUPPORT_OPTIONS, STRATEGY_GROUPS, StudentGoal } from '@/constants/data';
 
 interface FieldErrors {
   student?: string;
@@ -48,12 +39,15 @@ export default function EditAssessmentScreen() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const [student, setStudent] = useState<string | null>(null);
-  const [goal1, setGoal1] = useState<string[]>([]);
-  const [goal2Primary, setGoal2Primary] = useState<string[]>([]);
-  const [goal2Coord, setGoal2Coord] = useState<string[]>([]);
-  const [goal3, setGoal3] = useState<string[]>([]);
-  const [safetySkills, setSafetySkills] = useState<string[]>([]);
+  const [participation, setParticipation] = useState<string[]>([]);
+  const [support, setSupport] = useState<string[]>([]);
+  const [strategies, setStrategies] = useState<string[]>([]);
+  const [strategyOther, setStrategyOther] = useState('');
+  const [goalComments, setGoalComments] = useState<GoalComment[]>([]);
   const [notes, setNotes] = useState('');
+  const [studentGoals, setStudentGoals] = useState<StudentGoal | null>(null);
+  const [goalsLoading, setGoalsLoading] = useState(false);
+  const [legacyAssessment, setLegacyAssessment] = useState<Assessment | null>(null);
   const [originalTimestamp, setOriginalTimestamp] = useState('');
   const [status, setStatus] = useState<'draft' | 'reviewed'>('draft');
   const [reviewedByName, setReviewedByName] = useState<string | null>(null);
@@ -65,8 +59,6 @@ export default function EditAssessmentScreen() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const { staff, isAdmin, isOt } = useAuth();
 
-  const studentSafetySkills = student ? (STUDENT_GOALS[student]?.safetySkills ?? null) : null;
-
   useEffect(() => {
     if (!id) return;
     Promise.all([getAllAssessments(), getAllStaff()])
@@ -77,12 +69,13 @@ export default function EditAssessmentScreen() {
           router.back();
           return;
         }
+        setLegacyAssessment(found);
         setStudent(found.student_name);
-        setGoal1(found.goal1_selections ?? []);
-        setGoal2Primary(found.goal2_primary_selections ?? []);
-        setGoal2Coord(found.goal2_coordination_selections ?? []);
-        setGoal3(found.goal3_selections ?? []);
-        setSafetySkills(found.safety_skill_selections ?? []);
+        setParticipation(found.participation_selections ?? []);
+        setSupport(found.support_selections ?? []);
+        setStrategies(found.strategy_selections ?? []);
+        setStrategyOther(found.strategy_other ?? '');
+        setGoalComments(found.goal_comments ?? []);
         setNotes(found.notes ?? '');
         setOriginalTimestamp(found.timestamp);
         setStatus(found.status === 'reviewed' ? 'reviewed' : 'draft');
@@ -94,6 +87,36 @@ export default function EditAssessmentScreen() {
       .catch(e => showAlert('Error', e?.message))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Loads the student's current goal list and, on first load only, seeds any
+  // goal comments the saved assessment doesn't already have entries for.
+  useEffect(() => {
+    if (!student) {
+      setStudentGoals(null);
+      return;
+    }
+    setGoalsLoading(true);
+    resolveStudentGoals(student)
+      .then(goals => {
+        setStudentGoals(goals);
+        setGoalComments(prev => {
+          if (prev.length > 0) return prev;
+          return (goals?.activeGoals ?? []).map(goal => ({ goal, comment: '' }));
+        });
+      })
+      .catch(() => setStudentGoals(null))
+      .finally(() => setGoalsLoading(false));
+  }, [student]);
+
+  function handleSelectStudent(name: string) {
+    setStudent(name);
+    if (name !== student) setGoalComments([]);
+    setFieldErrors(e => ({ ...e, student: undefined }));
+  }
+
+  function updateGoalComment(index: number, text: string) {
+    setGoalComments(prev => prev.map((gc, i) => (i === index ? { ...gc, comment: text } : gc)));
+  }
 
   function handleSignOff() {
     if (!staff) return;
@@ -123,11 +146,16 @@ export default function EditAssessmentScreen() {
         student_name: student,
         supervisor_name: staff.name,
         timestamp: originalTimestamp,
-        goal1_selections: goal1,
-        goal2_primary_selections: goal2Primary,
-        goal2_coordination_selections: goal2Coord,
-        goal3_selections: goal3,
-        safety_skill_selections: safetySkills,
+        goal1_selections: legacyAssessment?.goal1_selections ?? [],
+        goal2_primary_selections: legacyAssessment?.goal2_primary_selections ?? [],
+        goal2_coordination_selections: legacyAssessment?.goal2_coordination_selections ?? [],
+        goal3_selections: legacyAssessment?.goal3_selections ?? [],
+        safety_skill_selections: legacyAssessment?.safety_skill_selections ?? [],
+        participation_selections: participation,
+        support_selections: support,
+        strategy_selections: strategies,
+        strategy_other: strategyOther,
+        goal_comments: goalComments,
         notes: notes.trim(),
         status,
         reviewed_at: reviewedAt,
@@ -165,9 +193,9 @@ export default function EditAssessmentScreen() {
     const errs: FieldErrors = {};
     if (!student) errs.student = 'Student not selected — tap to choose a student.';
     if (!staff) errs.supervisor = 'Your staff profile could not be loaded. Try signing out and back in.';
-    const hasAnyGoal =
-      goal1.length > 0 || goal2Primary.length > 0 || goal2Coord.length > 0 || goal3.length > 0;
-    if (!hasAnyGoal) errs.goals = 'Select at least one goal indicator before saving.';
+    if (participation.length === 0 || support.length === 0) {
+      errs.goals = 'Select at least one Participation level and one Support Required level before saving.';
+    }
     return errs;
   }
 
@@ -188,11 +216,16 @@ export default function EditAssessmentScreen() {
         supervisor_name: staff!.name,
         staff_id: staff!.id,
         timestamp: originalTimestamp,
-        goal1_selections: goal1,
-        goal2_primary_selections: goal2Primary,
-        goal2_coordination_selections: goal2Coord,
-        goal3_selections: goal3,
-        safety_skill_selections: safetySkills,
+        goal1_selections: legacyAssessment?.goal1_selections ?? [],
+        goal2_primary_selections: legacyAssessment?.goal2_primary_selections ?? [],
+        goal2_coordination_selections: legacyAssessment?.goal2_coordination_selections ?? [],
+        goal3_selections: legacyAssessment?.goal3_selections ?? [],
+        safety_skill_selections: legacyAssessment?.safety_skill_selections ?? [],
+        participation_selections: participation,
+        support_selections: support,
+        strategy_selections: strategies,
+        strategy_other: strategyOther.trim(),
+        goal_comments: goalComments,
         notes: notes.trim(),
       });
       showAlert('Updated!', `Assessment for ${student} has been updated.`, [
@@ -226,14 +259,7 @@ export default function EditAssessmentScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <StudentPicker
-          selected={student}
-          onSelect={name => {
-            setStudent(name);
-            setSafetySkills([]);
-            setFieldErrors(e => ({ ...e, student: undefined }));
-          }}
-        />
+        <StudentPicker selected={student} onSelect={handleSelectStudent} />
         {fieldErrors.student ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>⚠ {fieldErrors.student}</Text>
@@ -252,55 +278,44 @@ export default function EditAssessmentScreen() {
               </View>
             ) : null}
 
-            {studentSafetySkills && (
-              <SafetyGoalSection
-                safetySkills={studentSafetySkills}
-                selected={safetySkills}
-                onChange={setSafetySkills}
-              />
-            )}
-
-            <GoalSection
-              goalNumber={1}
-              title={GOAL1_LABEL}
+            <ChecklistCard
+              icon="1"
+              title="Participation"
               groups={[
                 {
-                  options: GOAL1_OPTIONS,
-                  selected: goal1,
-                  onChange: v => { setGoal1(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+                  options: PARTICIPATION_OPTIONS,
+                  selected: participation,
+                  onChange: v => { setParticipation(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
                 },
               ]}
             />
 
-            <GoalSection
-              goalNumber={2}
-              title={GOAL2_LABEL}
+            <ChecklistCard
+              icon="2"
+              title="Support Required"
               groups={[
                 {
-                  label: 'Effort level',
-                  options: GOAL2_PRIMARY_OPTIONS,
-                  selected: goal2Primary,
-                  onChange: v => { setGoal2Primary(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
-                },
-                {
-                  label: 'Arm/leg coordination',
-                  options: GOAL2_COORDINATION_OPTIONS,
-                  selected: goal2Coord,
-                  onChange: v => { setGoal2Coord(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+                  options: SUPPORT_OPTIONS,
+                  selected: support,
+                  onChange: v => { setSupport(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
                 },
               ]}
             />
 
-            <GoalSection
-              goalNumber={3}
-              title={GOAL3_LABEL}
-              groups={[
-                {
-                  options: GOAL3_OPTIONS,
-                  selected: goal3,
-                  onChange: v => { setGoal3(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+            <ChecklistCard
+              icon="3"
+              title="Strategies Used"
+              groups={STRATEGY_GROUPS.map(g => ({
+                label: g.label,
+                options: g.options,
+                selected: strategies.filter(s => g.options.includes(s)),
+                onChange: (v: string[]) => {
+                  setStrategies(prev => [...prev.filter(s => !g.options.includes(s)), ...v]);
                 },
-              ]}
+              }))}
+              otherValue={strategyOther}
+              onOtherChange={setStrategyOther}
+              otherLabel="Other"
             />
 
             {fieldErrors.goals ? (
@@ -309,15 +324,25 @@ export default function EditAssessmentScreen() {
               </View>
             ) : null}
 
+            <GoalCommentsSection
+              goals={studentGoals?.activeGoals ?? []}
+              comments={goalComments}
+              onChange={updateGoalComment}
+              loading={goalsLoading}
+            />
+
             <VoiceNoteInput
               value={notes}
               onChange={setNotes}
               studentName={student}
-              goalSelections={{
-                goal1,
-                goal2Primary,
-                goal2Coord,
-                goal3,
+              label="Anything else you want the OT to know?"
+              placeholder="Tap mic or type additional notes here..."
+              sessionContext={{
+                participation,
+                support,
+                strategies,
+                strategyOther,
+                goalComments,
               }}
             />
           </>
@@ -486,10 +511,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: COLORS.leftAccent,
   },
-  cardError: {
-    borderColor: '#E53935',
-    borderLeftColor: '#E53935',
-  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -571,11 +592,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#C62828',
     fontWeight: '600',
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#C62828',
-    fontWeight: '600',
-    marginTop: 8,
   },
 });

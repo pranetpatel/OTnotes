@@ -48,13 +48,34 @@ function noteSectionHtml(a: Assessment): string {
       </div>`
     : '';
 
-  return `
-    <div class="note-block">
-      <h1>${escapeHtml(a.student_name)}</h1>
-      <div class="meta-row">${dateStr} · ${timeStr}</div>
-      <div class="meta-row">Staff: ${escapeHtml(a.supervisor_name)}</div>
-      <div class="meta-row">Status: ${statusHtml}</div>
+  const isNewFormat =
+    (a.participation_selections?.length ?? 0) > 0 ||
+    (a.support_selections?.length ?? 0) > 0 ||
+    (a.strategy_selections?.length ?? 0) > 0 ||
+    Boolean(a.strategy_other?.trim()) ||
+    (a.goal_comments?.some(gc => gc.comment.trim().length > 0) ?? false);
 
+  const goalCommentsHtml = (a.goal_comments ?? [])
+    .filter(gc => gc.comment.trim())
+    .map((gc, i) => `
+      <div class="goal-label">Goal ${i + 1} — ${escapeHtml(gc.goal)}</div>
+      <div class="notes-box">${escapeHtml(gc.comment)}</div>
+    `).join('');
+
+  const bodyHtml = isNewFormat
+    ? `
+      <div class="goal-label">Participation</div>
+      ${chipList(a.participation_selections ?? [])}
+
+      <div class="goal-label">Support Required</div>
+      ${chipList(a.support_selections ?? [])}
+
+      <div class="goal-label">Strategies Used</div>
+      ${chipList(a.strategy_other?.trim() ? [...(a.strategy_selections ?? []), a.strategy_other.trim()] : (a.strategy_selections ?? []))}
+
+      ${goalCommentsHtml}
+    `
+    : `
       <div class="goal-label">Goal 1 — Core Stability & Postural Control</div>
       ${chipList(a.goal1_selections)}
 
@@ -70,8 +91,18 @@ function noteSectionHtml(a: Assessment): string {
       ${a.safety_skill_selections?.length ? `
       <div class="goal-label">Safety Skills</div>
       ${chipList(a.safety_skill_selections)}` : ''}
+    `;
 
-      ${a.notes ? `<div class="notes-box"><strong>Session Notes:</strong><br/>${escapeHtml(a.notes)}</div>` : ''}
+  return `
+    <div class="note-block">
+      <h1>${escapeHtml(a.student_name)}</h1>
+      <div class="meta-row">${dateStr} · ${timeStr}</div>
+      <div class="meta-row">Staff: ${escapeHtml(a.supervisor_name)}</div>
+      <div class="meta-row">Status: ${statusHtml}</div>
+
+      ${bodyHtml}
+
+      ${a.notes ? `<div class="notes-box"><strong>${isNewFormat ? 'Anything Else' : 'Session Notes'}:</strong><br/>${escapeHtml(a.notes)}</div>` : ''}
       ${reviewHtml}
     </div>
   `;

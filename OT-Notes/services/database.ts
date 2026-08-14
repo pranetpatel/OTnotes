@@ -1,6 +1,11 @@
 import { supabase } from './supabase';
 import { findStudentByName } from './students';
 
+export interface GoalComment {
+  goal: string;
+  comment: string;
+}
+
 export interface Assessment {
   id?: number;
   student_name: string;
@@ -13,6 +18,11 @@ export interface Assessment {
   goal2_coordination_selections: string[];
   goal3_selections: string[];
   safety_skill_selections: string[];
+  participation_selections?: string[];
+  support_selections?: string[];
+  strategy_selections?: string[];
+  strategy_other?: string;
+  goal_comments?: GoalComment[];
   notes: string;
   status?: 'draft' | 'reviewed';
   reviewed_by?: number | null;

@@ -1,10 +1,11 @@
 type RefinementContext = {
   studentName: string | null;
-  goalSelections: {
-    goal1: string[];
-    goal2Primary: string[];
-    goal2Coordination: string[];
-    goal3: string[];
+  sessionContext: {
+    participation: string[];
+    support: string[];
+    strategies: string[];
+    strategyOther: string;
+    goalComments: { goal: string; comment: string }[];
   };
 };
 
@@ -21,7 +22,7 @@ export async function refineNoteWithOpenAI(rawNote: string, context: RefinementC
 
   const promptPayload = {
     student: context.studentName ?? 'Unknown student',
-    goals: context.goalSelections,
+    session: context.sessionContext,
     rawTranscription: cleanNote,
     formattingRules: [
       'Return only the refined note text.',

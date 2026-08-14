@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -12,52 +11,42 @@ import {
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { StudentPicker } from '@/components/StudentPicker';
-import { GoalSection } from '@/components/GoalSection';
-import { SafetyGoalSection } from '@/components/SafetyGoalSection';
+import { ChecklistCard } from '@/components/ChecklistCard';
+import { GoalCommentsSection } from '@/components/GoalCommentsSection';
 import { VoiceNoteInput } from '@/components/VoiceNoteInput';
-import { saveAssessment } from '@/services/database';
+import { saveAssessment, GoalComment } from '@/services/database';
 import { useAuth } from '@/context/AuthContext';
 import { showAlert } from '@/utils/alert';
 import { getCurrentSlot, getNextSlot, formatMinutes, toISODate, addDays } from '@/constants/schedule';
-import { getStudentsForSlot } from '@/services/scheduleStorage';
-import {
-  COLORS,
-  GOAL1_LABEL,
-  GOAL1_OPTIONS,
-  GOAL2_LABEL,
-  GOAL2_COORDINATION_OPTIONS,
-  GOAL2_PRIMARY_OPTIONS,
-  GOAL3_LABEL,
-  GOAL3_OPTIONS,
-  STUDENT_GOALS,
-} from '@/constants/data';
+import { getStudentsForSlot, resolveStudentGoals } from '@/services/scheduleStorage';
+import { COLORS, PARTICIPATION_OPTIONS, SUPPORT_OPTIONS, STRATEGY_GROUPS, StudentGoal } from '@/constants/data';
 
 function useForm() {
   const [student, setStudent] = useState<string | null>(null);
-  const [goal1, setGoal1] = useState<string[]>([]);
-  const [goal2Primary, setGoal2Primary] = useState<string[]>([]);
-  const [goal2Coord, setGoal2Coord] = useState<string[]>([]);
-  const [goal3, setGoal3] = useState<string[]>([]);
-  const [safetySkills, setSafetySkills] = useState<string[]>([]);
+  const [participation, setParticipation] = useState<string[]>([]);
+  const [support, setSupport] = useState<string[]>([]);
+  const [strategies, setStrategies] = useState<string[]>([]);
+  const [strategyOther, setStrategyOther] = useState('');
+  const [goalComments, setGoalComments] = useState<GoalComment[]>([]);
   const [notes, setNotes] = useState('');
 
   function reset() {
     setStudent(null);
-    setGoal1([]);
-    setGoal2Primary([]);
-    setGoal2Coord([]);
-    setGoal3([]);
-    setSafetySkills([]);
+    setParticipation([]);
+    setSupport([]);
+    setStrategies([]);
+    setStrategyOther('');
+    setGoalComments([]);
     setNotes('');
   }
 
   return {
     student, setStudent,
-    goal1, setGoal1,
-    goal2Primary, setGoal2Primary,
-    goal2Coord, setGoal2Coord,
-    goal3, setGoal3,
-    safetySkills, setSafetySkills,
+    participation, setParticipation,
+    support, setSupport,
+    strategies, setStrategies,
+    strategyOther, setStrategyOther,
+    goalComments, setGoalComments,
     notes, setNotes,
     reset,
   };
@@ -79,14 +68,14 @@ export default function AssessmentScreen() {
   const [nextStudents, setNextStudents] = useState<string[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [reportDate, setReportDate] = useState(() => new Date());
+  const [studentGoals, setStudentGoals] = useState<StudentGoal | null>(null);
+  const [goalsLoading, setGoalsLoading] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
-  const studentSafetySkills = form.student ? (STUDENT_GOALS[form.student]?.safetySkills ?? null) : null;
   const isReportDateToday = toISODate(reportDate) === toISODate(new Date());
 
   function handleSelectStudent(name: string) {
     form.setStudent(name);
-    form.setSafetySkills([]);
     setFieldErrors(e => ({ ...e, student: undefined }));
   }
 
@@ -96,6 +85,25 @@ export default function AssessmentScreen() {
       setReportDate(new Date());
     }
   }, [params.student]);
+
+  useEffect(() => {
+    if (!form.student) {
+      setStudentGoals(null);
+      form.setGoalComments([]);
+      return;
+    }
+    setGoalsLoading(true);
+    resolveStudentGoals(form.student)
+      .then(goals => {
+        setStudentGoals(goals);
+        form.setGoalComments((goals?.activeGoals ?? []).map(goal => ({ goal, comment: '' })));
+      })
+      .catch(() => {
+        setStudentGoals(null);
+        form.setGoalComments([]);
+      })
+      .finally(() => setGoalsLoading(false));
+  }, [form.student]);
 
   useFocusEffect(useCallback(() => {
     const n = new Date();
@@ -118,13 +126,14 @@ export default function AssessmentScreen() {
     const errs: FieldErrors = {};
     if (!form.student) errs.student = 'Student not selected — tap to choose a student.';
     if (!staff) errs.supervisor = 'Your staff profile could not be loaded. Try signing out and back in.';
-    const hasAnyGoal =
-      form.goal1.length > 0 ||
-      form.goal2Primary.length > 0 ||
-      form.goal2Coord.length > 0 ||
-      form.goal3.length > 0;
-    if (!hasAnyGoal) errs.goals = 'Select at least one goal indicator before saving.';
+    if (form.participation.length === 0 || form.support.length === 0) {
+      errs.goals = 'Select at least one Participation level and one Support Required level before saving.';
+    }
     return errs;
+  }
+
+  function updateGoalComment(index: number, text: string) {
+    form.setGoalComments(prev => prev.map((gc, i) => (i === index ? { ...gc, comment: text } : gc)));
   }
 
   async function handleSubmit() {
@@ -144,11 +153,16 @@ export default function AssessmentScreen() {
         supervisor_name: staff!.name,
         staff_id: staff!.id,
         timestamp: reportDate.toISOString(),
-        goal1_selections: form.goal1,
-        goal2_primary_selections: form.goal2Primary,
-        goal2_coordination_selections: form.goal2Coord,
-        goal3_selections: form.goal3,
-        safety_skill_selections: form.safetySkills,
+        goal1_selections: [],
+        goal2_primary_selections: [],
+        goal2_coordination_selections: [],
+        goal3_selections: [],
+        safety_skill_selections: [],
+        participation_selections: form.participation,
+        support_selections: form.support,
+        strategy_selections: form.strategies,
+        strategy_other: form.strategyOther.trim(),
+        goal_comments: form.goalComments,
         notes: form.notes.trim(),
       });
       setSavedStudent(form.student);
@@ -291,55 +305,44 @@ export default function AssessmentScreen() {
                 </View>
               ) : null}
 
-              {studentSafetySkills && (
-                <SafetyGoalSection
-                  safetySkills={studentSafetySkills}
-                  selected={form.safetySkills}
-                  onChange={form.setSafetySkills}
-                />
-              )}
-
-              <GoalSection
-                goalNumber={1}
-                title={GOAL1_LABEL}
+              <ChecklistCard
+                icon="1"
+                title="Participation"
                 groups={[
                   {
-                    options: GOAL1_OPTIONS,
-                    selected: form.goal1,
-                    onChange: v => { form.setGoal1(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+                    options: PARTICIPATION_OPTIONS,
+                    selected: form.participation,
+                    onChange: v => { form.setParticipation(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
                   },
                 ]}
               />
 
-              <GoalSection
-                goalNumber={2}
-                title={GOAL2_LABEL}
+              <ChecklistCard
+                icon="2"
+                title="Support Required"
                 groups={[
                   {
-                    label: 'Effort level',
-                    options: GOAL2_PRIMARY_OPTIONS,
-                    selected: form.goal2Primary,
-                    onChange: v => { form.setGoal2Primary(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
-                  },
-                  {
-                    label: 'Arm/leg coordination',
-                    options: GOAL2_COORDINATION_OPTIONS,
-                    selected: form.goal2Coord,
-                    onChange: v => { form.setGoal2Coord(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+                    options: SUPPORT_OPTIONS,
+                    selected: form.support,
+                    onChange: v => { form.setSupport(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
                   },
                 ]}
               />
 
-              <GoalSection
-                goalNumber={3}
-                title={GOAL3_LABEL}
-                groups={[
-                  {
-                    options: GOAL3_OPTIONS,
-                    selected: form.goal3,
-                    onChange: v => { form.setGoal3(v); setFieldErrors(e => ({ ...e, goals: undefined })); },
+              <ChecklistCard
+                icon="3"
+                title="Strategies Used"
+                groups={STRATEGY_GROUPS.map(g => ({
+                  label: g.label,
+                  options: g.options,
+                  selected: form.strategies.filter(s => g.options.includes(s)),
+                  onChange: (v: string[]) => {
+                    form.setStrategies(prev => [...prev.filter(s => !g.options.includes(s)), ...v]);
                   },
-                ]}
+                }))}
+                otherValue={form.strategyOther}
+                onOtherChange={form.setStrategyOther}
+                otherLabel="Other"
               />
 
               {fieldErrors.goals ? (
@@ -348,15 +351,25 @@ export default function AssessmentScreen() {
                 </View>
               ) : null}
 
+              <GoalCommentsSection
+                goals={studentGoals?.activeGoals ?? []}
+                comments={form.goalComments}
+                onChange={updateGoalComment}
+                loading={goalsLoading}
+              />
+
               <VoiceNoteInput
                 value={form.notes}
                 onChange={form.setNotes}
                 studentName={form.student}
-                goalSelections={{
-                  goal1: form.goal1,
-                  goal2Primary: form.goal2Primary,
-                  goal2Coord: form.goal2Coord,
-                  goal3: form.goal3,
+                label="Anything else you want the OT to know?"
+                placeholder="Tap mic or type additional notes here..."
+                sessionContext={{
+                  participation: form.participation,
+                  support: form.support,
+                  strategies: form.strategies,
+                  strategyOther: form.strategyOther,
+                  goalComments: form.goalComments,
                 }}
               />
             </>
@@ -435,17 +448,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: COLORS.text,
-  },
-  supervisorInput: {
-    fontSize: 16,
-    color: COLORS.text,
-    backgroundColor: COLORS.bg,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    minHeight: 48,
   },
   actionRow: {
     flexDirection: 'row',
@@ -575,10 +577,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
   },
-  cardError: {
-    borderColor: '#E53935',
-    borderLeftColor: '#E53935',
-  },
   errorBanner: {
     backgroundColor: '#FFF0F0',
     borderRadius: 10,
@@ -592,12 +590,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#C62828',
     fontWeight: '600',
-  },
-  errorText: {
-    fontSize: 13,
-    color: '#C62828',
-    fontWeight: '600',
-    marginTop: 8,
   },
   completionContainer: {
     flex: 1,
